@@ -1,27 +1,58 @@
 blueprint:
-  name: "Room Light State Machine"
-  description: "Manages a room with 3 states (Off, On, LowLights) via an Input Select state machine using button triggers and motion detection."
+  name: Room Light State Machine v2
+  description: >-
+    Room lighting state machine with:
+      - Manual toggle events
+      - Motion activation
+      - Automatic dimming after inactivity
+      - Lux-aware motion activation
+
   domain: automation
 
   input:
-    state_helper:
-      name: State Helper (Dropdown)
-      description: The Input Select entity that tracks and controls the room state.
+    room_state:
+      name: Room State Helper
+      description: Input select containing Off, On and LowLights.
       selector:
         entity:
           domain: input_select
 
     light_target:
       name: Light Target
-      description: The light or light group to control.
       selector:
         target:
           entity:
             domain: light
 
+    toggle_event:
+      name: Toggle Event Trigger(s)
+      description: >-
+        Event/device triggers that should toggle the room lights.
+        Example: Zigbee button press, MQTT action event, remote click.
+      selector:
+        trigger:
+
+    motion_sensor:
+      name: Motion Sensor
+      description: Motion sensor or occupancy group.
+      selector:
+        entity:
+          domain:
+            - binary_sensor
+            - group
+
+    no_motion_wait:
+      name: No Motion Timeout
+      default: 120
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: seconds
+          mode: box
+
     low_brightness:
-      name: LowLights Brightness (%)
-      description: The brightness level when the room enters 'LowLights' state.
+      name: LowLights Brightness
       default: 20
       selector:
         number:
@@ -30,15 +61,44 @@ blueprint:
           unit_of_measurement: "%"
           mode: slider
 
-    custom_button_trigger:
-  # Custom button trigger(s)
-  !input custom_button_trigger
+    lux_sensor:
+      name: Lux Sensor (Optional)
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+          device_class: illuminance
+
+    lux_threshold:
+      name: Lux Threshold
+      description: 0 disables lux checking.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 1000
+          unit_of_measurement: lx
+          mode: box
+
+mode: restart
+
+variables:
+  room_state_entity: !input room_state
+  lux_sensor_entity: !input lux_sensor
+  lux_limit: !input lux_threshold
+  low_brightness_value: !input low_brightness
+
+trigger:
+  # Manual toggle trigger(s)
+  - platform: event
+    event_type: blueprint_dummy_event
+    id: impossible_placeholder
 
   # Motion detected
   - platform: state
     entity_id: !input motion_sensor
     to: "on"
-    id: motion_detected
+    id: motion_on
 
   # No motion timeout
   - platform: state
@@ -46,62 +106,59 @@ blueprint:
     to: "off"
     for:
       seconds: !input no_motion_wait
-    id: no_motion_timeout
+    id: motion_off
 
   # State helper changed
   - platform: state
-    entity_id: !input state_helper
-    id: state_changed
+    entity_id: !input room_state
+    id: room_state_changed
+
+triggers: !input toggle_event
 
 condition: []
 
 action:
   - choose:
 
-      # Button pressed while Off -> On
+      # Manual toggle while Off -> On
       - conditions:
           - condition: template
             value_template: >-
               {{
-                trigger.id not in [
-                  'motion_detected',
-                  'no_motion_timeout',
-                  'state_changed'
-                ]
-                and states(state_helper_entity) == 'Off'
+                trigger.id is not defined
+                and states(room_state_entity) == 'Off'
               }}
         sequence:
           - service: input_select.select_option
             target:
-              entity_id: !input state_helper
+              entity_id: !input room_state
             data:
               option: "On"
 
-      # Button pressed while On or LowLights -> Off
+      # Manual toggle while On/LowLights -> Off
       - conditions:
           - condition: template
             value_template: >-
               {{
-                trigger.id not in [
-                  'motion_detected',
-                  'no_motion_timeout',
-                  'state_changed'
-                ]
-                and states(state_helper_entity) in ['On', 'LowLights']
+                trigger.id is not defined
+                and states(room_state_entity) in ['On', 'LowLights']
               }}
         sequence:
           - service: input_select.select_option
             target:
-              entity_id: !input state_helper
+              entity_id: !input room_state
             data:
               option: "Off"
 
-      # Motion while Off -> On (lux aware)
+      # Motion while Off -> On
       - conditions:
           - condition: trigger
-            id: motion_detected
+            id: motion_on
+
           - condition: template
-            value_template: "{{ states(state_helper_entity) == 'Off' }}"
+            value_template: >-
+              {{ states(room_state_entity) == 'Off' }}
+
           - condition: template
             value_template: >-
               {{
@@ -112,51 +169,59 @@ action:
         sequence:
           - service: input_select.select_option
             target:
-              entity_id: !input state_helper
+              entity_id: !input room_state
             data:
               option: "On"
 
-      # No motion while On -> LowLights
+      # No motion -> LowLights
       - conditions:
           - condition: trigger
-            id: no_motion_timeout
+            id: motion_off
+
           - condition: template
-            value_template: "{{ states(state_helper_entity) == 'On' }}"
+            value_template: >-
+              {{ states(room_state_entity) == 'On' }}
         sequence:
           - service: input_select.select_option
             target:
-              entity_id: !input state_helper
+              entity_id: !input room_state
             data:
               option: "LowLights"
 
-      # Entered Off -> turn lights off
+      # Entered Off
       - conditions:
           - condition: trigger
-            id: state_changed
+            id: room_state_changed
+
           - condition: template
-            value_template: "{{ trigger.to_state.state == 'Off' }}"
+            value_template: >-
+              {{ trigger.to_state.state == 'Off' }}
         sequence:
           - service: light.turn_off
             target: !input light_target
 
-      # Entered On -> full brightness
+      # Entered On
       - conditions:
           - condition: trigger
-            id: state_changed
+            id: room_state_changed
+
           - condition: template
-            value_template: "{{ trigger.to_state.state == 'On' }}"
+            value_template: >-
+              {{ trigger.to_state.state == 'On' }}
         sequence:
           - service: light.turn_on
             target: !input light_target
             data:
               brightness_pct: 100
 
-      # Entered LowLights -> dim lights
+      # Entered LowLights
       - conditions:
           - condition: trigger
-            id: state_changed
+            id: room_state_changed
+
           - condition: template
-            value_template: "{{ trigger.to_state.state == 'LowLights' }}"
+            value_template: >-
+              {{ trigger.to_state.state == 'LowLights' }}
         sequence:
           - service: light.turn_on
             target: !input light_target
