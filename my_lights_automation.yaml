@@ -86,7 +86,8 @@ variables:
 
 trigger:
   # Button trigger(s)
-  - !input custom_button_trigger
+  - triggers: !input custom_button_trigger
+    id: button_pressed
 
   # Motion detected
   - platform: state
