@@ -24,6 +24,49 @@ blueprint:
           entity:
             domain: light
 
+    motion_sensor:
+      name: Motion Sensor
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: motion
+
+    no_motion_wait:
+      name: No Motion Wait Time
+      default: 300
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: seconds
+          mode: box
+
+    lux_sensor:
+      name: Lux Sensor
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+
+    lux_limit:
+      name: Lux Limit
+      description: Motion only turns lights on below this lux value. Set 0 to disable.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 10000
+          mode: box
+
+    low_brightness_value:
+      name: Low Light Brightness %
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+
     toggle_event:
       name: Toggle Event Trigger(s)
       description: >-
@@ -31,6 +74,16 @@ blueprint:
         Example: Zigbee button press, MQTT action event, remote click.
       selector:
         trigger:
+
+mode: restart
+
+variables:
+  room_state_entity: !input room_state
+  lux_sensor_entity: !input lux_sensor
+  lux_limit: !input lux_limit
+  low_brightness_value: !input low_brightness_value
+
+trigger:
   # Manual toggle trigger(s)
   - triggers: !input toggle_event
     id: manual_toggle
@@ -64,7 +117,7 @@ action:
           - condition: template
             value_template: >-
               {{
-                trigger.id is not defined
+                trigger.id == 'manual_toggle'
                 and states(room_state_entity) == 'Off'
               }}
         sequence:
@@ -79,7 +132,7 @@ action:
           - condition: template
             value_template: >-
               {{
-                trigger.id is not defined
+                trigger.id == 'manual_toggle'
                 and states(room_state_entity) in ['On', 'LowLights']
               }}
         sequence:
@@ -165,4 +218,4 @@ action:
           - service: light.turn_on
             target: !input light_target
             data:
-              brightness_pct: "{{ low_brightness_value }}"
+              brightness_pct: !input low_brightness_value
