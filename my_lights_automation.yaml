@@ -107,8 +107,13 @@ trigger:
     entity_id: !input room_state
     id: room_state_changed
 
-  # Manual toggle trigger(s)
-  - triggers: !input toggle_event
+  # Manual toggle button
+  - platform: device
+    device_id: !input toggle_device
+    domain: mqtt
+    type: action
+    subtype: toggle_s2_action
+    id: manual_toggle
 
 condition: []
 
