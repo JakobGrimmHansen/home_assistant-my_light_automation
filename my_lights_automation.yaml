@@ -32,7 +32,8 @@ blueprint:
 
     custom_button_trigger:
   # Custom button trigger(s) from blueprint input
-  !input custom_button_trigger
+  - triggers: !input custom_button_trigger
+    id: button_pressed
 
   # Motion detected
   - platform: state
