@@ -30,78 +30,18 @@ blueprint:
         Event/device triggers that should toggle the room lights.
         Example: Zigbee button press, MQTT action event, remote click.
       selector:
-        trigger:
-
-    motion_sensor:
-      name: Motion Sensor
-      description: Motion sensor or occupancy group.
-      selector:
-        entity:
-          domain:
-            - binary_sensor
-            - group
-
-    no_motion_wait:
-      name: No Motion Timeout
-      default: 120
-      selector:
-        number:
-          min: 0
-          max: 3600
-          unit_of_measurement: seconds
-          mode: box
-
-    low_brightness:
-      name: LowLights Brightness
-      default: 20
-      selector:
-        number:
-          min: 1
-          max: 100
-          unit_of_measurement: "%"
-          mode: slider
-
-    lux_sensor:
-      name: Lux Sensor (Optional)
-      default: ""
-      selector:
-        entity:
-          domain: sensor
-          device_class: illuminance
-
-    lux_threshold:
-      name: Lux Threshold
-      description: 0 disables lux checking.
-      default: 0
-      selector:
-        number:
-          min: 0
-          max: 1000
-          unit_of_measurement: lx
-          mode: box
-
-mode: restart
-
-variables:
-  room_state_entity: !input room_state
-  lux_sensor_entity: !input lux_sensor
-  lux_limit: !input lux_threshold
-  low_brightness_value: !input low_brightness
-
-trigger:
+        triggers:
   # Manual toggle trigger(s)
-  - platform: event
-    event_type: blueprint_dummy_event
-    id: impossible_placeholder
+  - triggers: !input toggle_event
 
   # Motion detected
-  - platform: state
+  - trigger: state
     entity_id: !input motion_sensor
     to: "on"
     id: motion_on
 
   # No motion timeout
-  - platform: state
+  - trigger: state
     entity_id: !input motion_sensor
     to: "off"
     for:
@@ -109,11 +49,9 @@ trigger:
     id: motion_off
 
   # State helper changed
-  - platform: state
+  - trigger: state
     entity_id: !input room_state
     id: room_state_changed
-
-triggers: !input toggle_event
 
 condition: []
 
