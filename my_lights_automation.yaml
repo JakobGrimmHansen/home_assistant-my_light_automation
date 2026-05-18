@@ -2,7 +2,7 @@ blueprint:
   name: Room Light State Machine v2
   description: >-
     Room lighting state machine with:
-      - Manual toggle events
+      - Manual toggle button
       - Motion activation
       - Automatic dimming after inactivity
       - Lux-aware motion activation
@@ -32,6 +32,12 @@ blueprint:
           filter:
             - domain: binary_sensor
             - domain: group
+
+    toggle_device:
+      name: Toggle Device
+      description: Ubisys D1 or other Zigbee button device.
+      selector:
+        device: {}
 
     no_motion_wait:
       name: No Motion Wait Time
@@ -71,14 +77,6 @@ blueprint:
           max: 100
           unit_of_measurement: "%"
 
-    toggle_event:
-      name: Toggle Event Trigger(s)
-      description: >-
-        Event/device triggers that should toggle the room lights.
-        Example: Zigbee button press, MQTT action event, remote click.
-      selector:
-        trigger:
-
 mode: restart
 
 variables:
@@ -87,15 +85,15 @@ variables:
   lux_limit: !input lux_limit
   low_brightness_value: !input low_brightness_value
 
-trigger:
+triggers:
   # Motion detected
-  - platform: state
+  - trigger: state
     entity_id: !input motion_sensor
     to: "on"
     id: motion_on
 
   # No motion timeout
-  - platform: state
+  - trigger: state
     entity_id: !input motion_sensor
     to: "off"
     for:
@@ -103,21 +101,21 @@ trigger:
     id: motion_off
 
   # State helper changed
-  - platform: state
+  - trigger: state
     entity_id: !input room_state
     id: room_state_changed
 
   # Manual toggle button
-  - platform: device
+  - trigger: device
     device_id: !input toggle_device
     domain: mqtt
     type: action
     subtype: toggle_s2_action
     id: manual_toggle
 
-condition: []
+conditions: []
 
-action:
+actions:
   - choose:
 
       # Manual toggle while Off -> On
@@ -125,11 +123,11 @@ action:
           - condition: template
             value_template: >-
               {{
-                trigger.platform != 'state'
+                trigger.id == 'manual_toggle'
                 and states(room_state_entity) == 'Off'
               }}
         sequence:
-          - service: input_select.select_option
+          - action: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -140,11 +138,11 @@ action:
           - condition: template
             value_template: >-
               {{
-                trigger.platform != 'state'
+                trigger.id == 'manual_toggle'
                 and states(room_state_entity) in ['On', 'LowLights']
               }}
         sequence:
-          - service: input_select.select_option
+          - action: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -167,7 +165,7 @@ action:
                 or states(lux_sensor_entity) | float(0) < lux_limit | float(0)
               }}
         sequence:
-          - service: input_select.select_option
+          - action: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -182,7 +180,7 @@ action:
             value_template: >-
               {{ states(room_state_entity) == 'On' }}
         sequence:
-          - service: input_select.select_option
+          - action: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -197,7 +195,7 @@ action:
             value_template: >-
               {{ trigger.to_state.state == 'Off' }}
         sequence:
-          - service: light.turn_off
+          - action: light.turn_off
             target: !input light_target
 
       # Entered On
@@ -209,7 +207,7 @@ action:
             value_template: >-
               {{ trigger.to_state.state == 'On' }}
         sequence:
-          - service: light.turn_on
+          - action: light.turn_on
             target: !input light_target
             data:
               brightness_pct: 100
@@ -223,7 +221,7 @@ action:
             value_template: >-
               {{ trigger.to_state.state == 'LowLights' }}
         sequence:
-          - service: light.turn_on
+          - action: light.turn_on
             target: !input light_target
             data:
               brightness_pct: !input low_brightness_value
