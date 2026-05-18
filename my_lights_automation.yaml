@@ -1,4 +1,3 @@
-
 blueprint:
   name: "Room Light State Machine"
   description: "Manages a room with 3 states (Off, On, LowLights) via an Input Select state machine using button triggers and motion detection."
@@ -39,7 +38,13 @@ blueprint:
 
     motion_trigger:
       name: Motion Trigger(s)
-      description: "Define your motion triggers here. Can be a single trigger or a list of triggers."
+      description: "Define your motion detected triggers here. Can be a single trigger or a list of triggers."
+      selector:
+        trigger:
+
+    no_motion_trigger:
+      name: No Motion Trigger(s)
+      description: "Define your no-motion / cleared triggers here. Can be a single trigger or a list of triggers."
       selector:
         trigger:
 
@@ -91,10 +96,9 @@ trigger:
   - trigger: !input motion_trigger
     id: motion_detected
 
-  # No motion timeout
-  - platform: state
-    entity_id: []
-    id: disabled_no_motion_timeout
+  # No motion detected
+  - trigger: !input no_motion_trigger
+    id: no_motion_timeout
 
   # State helper changed
   - platform: state
