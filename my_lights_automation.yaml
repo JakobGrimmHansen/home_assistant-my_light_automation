@@ -26,10 +26,12 @@ blueprint:
 
     motion_sensor:
       name: Motion Sensor or Group
-      description: Motion binary sensor or grouped binary sensor.
+      description: Motion sensor, occupancy sensor, or sensor group.
       selector:
         entity:
-          domain: binary_sensor
+          filter:
+            - domain: binary_sensor
+            - domain: group
 
     no_motion_wait:
       name: No Motion Wait Time
