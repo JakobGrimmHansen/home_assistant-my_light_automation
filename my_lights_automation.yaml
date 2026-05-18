@@ -31,9 +31,8 @@ blueprint:
           mode: slider
 
     custom_button_trigger:
-  # Custom button trigger(s) from blueprint input
-  - triggers: !input custom_button_trigger
-    id: button_pressed
+  # Custom button trigger(s)
+  !input custom_button_trigger
 
   # Motion detected
   - platform: state
@@ -62,9 +61,15 @@ action:
       # Button pressed while Off -> On
       - conditions:
           - condition: template
-            value_template: "{{ trigger.id == 'button_pressed' }}"
-          - condition: template
-            value_template: "{{ states(state_helper_entity) == 'Off' }}"
+            value_template: >-
+              {{
+                trigger.id not in [
+                  'motion_detected',
+                  'no_motion_timeout',
+                  'state_changed'
+                ]
+                and states(state_helper_entity) == 'Off'
+              }}
         sequence:
           - service: input_select.select_option
             target:
@@ -75,9 +80,15 @@ action:
       # Button pressed while On or LowLights -> Off
       - conditions:
           - condition: template
-            value_template: "{{ trigger.id == 'button_pressed' }}"
-          - condition: template
-            value_template: "{{ states(state_helper_entity) in ['On', 'LowLights'] }}"
+            value_template: >-
+              {{
+                trigger.id not in [
+                  'motion_detected',
+                  'no_motion_timeout',
+                  'state_changed'
+                ]
+                and states(state_helper_entity) in ['On', 'LowLights']
+              }}
         sequence:
           - service: input_select.select_option
             target:
