@@ -133,13 +133,20 @@ trigger:
     subtype: toggle_s2
     id: manual_toggle
 
-  # Triple toggle gesture
+  # Dimmer hold gesture -> auto_dimmed
   - platform: device
     device_id: !input toggle_device
     domain: mqtt
     type: action
-    subtype: toggle_s2
-    id: triple_toggle
+    subtype: brightness_move_up_s2
+    id: auto_dimmed_trigger_up
+
+  - platform: device
+    device_id: !input toggle_device
+    domain: mqtt
+    type: action
+    subtype: brightness_move_down_s2
+    id: auto_dimmed_trigger_down
 
 condition: []
 
@@ -147,7 +154,23 @@ action:
   - choose:
 
       #########################################################
-      # TRIPLE TOGGLE -> auto_dimmed
+      # DIMMER HOLD -> auto_dimmed
+      #########################################################
+
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: auto_dimmed_trigger_up
+              - condition: trigger
+                id: auto_dimmed_trigger_down
+        sequence:
+          - service: input_select.select_option
+            target:
+              entity_id: !input room_state
+            data:
+              option: "auto_dimmed"
+
       #########################################################
 
       - conditions:
