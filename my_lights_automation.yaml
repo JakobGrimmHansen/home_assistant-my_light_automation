@@ -25,11 +25,11 @@ blueprint:
             domain: light
 
     motion_sensor:
-      name: Motion Sensor
+      name: Motion Sensor or Group
+      description: Motion binary sensor or grouped binary sensor.
       selector:
         entity:
           domain: binary_sensor
-          device_class: motion
 
     no_motion_wait:
       name: No Motion Wait Time
