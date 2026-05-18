@@ -1,12 +1,12 @@
 blueprint:
-  name: Room Light State Machine v3
+  name: Room Light State Machine v4
   description: >-
-    Room lighting automation with:
-      - Manual toggle button
+    Modern room lighting state machine with:
+      - Manual button toggle
       - Motion activation
       - Automatic dimming after inactivity
       - Automatic off after low-light timeout
-      - Lux-aware motion activation
+      - Lux-aware activation
 
   domain: automation
 
@@ -36,13 +36,13 @@ blueprint:
 
     toggle_device:
       name: Toggle Device
-      description: Ubisys D1 dimmer/button device.
+      description: Ubisys D1 button/dimmer device.
       selector:
         device: {}
 
     no_motion_wait:
       name: Time Before LowLights
-      description: Seconds after motion stops before entering LowLights.
+      description: Seconds after no motion before entering LowLights.
       default: 300
       selector:
         number:
@@ -64,7 +64,7 @@ blueprint:
 
     lux_sensor:
       name: Lux Sensor
-      description: Optional lux sensor used to prevent activation in bright rooms.
+      description: Optional lux sensor.
       default: ""
       selector:
         entity:
@@ -78,6 +78,7 @@ blueprint:
         number:
           min: 0
           max: 10000
+          mode: box
 
     low_brightness_value:
       name: Low Light Brightness %
@@ -86,23 +87,25 @@ blueprint:
         number:
           min: 1
           max: 100
+          unit_of_measurement: "%"
 
 mode: restart
 
 variables:
   room_state_entity: !input room_state
   lux_sensor_entity: !input lux_sensor
-  lux_limit: !input lux_limit
+  lux_limit_value: !input lux_limit
+  low_brightness: !input low_brightness_value
 
-triggers:
+trigger:
   # Motion detected
-  - trigger: state
+  - platform: state
     entity_id: !input motion_sensor
     to: "on"
     id: motion_on
 
-  # No motion timeout -> LowLights
-  - trigger: state
+  # No motion -> LowLights
+  - platform: state
     entity_id: !input motion_sensor
     to: "off"
     for:
@@ -110,7 +113,7 @@ triggers:
     id: motion_off
 
   # LowLights timeout -> Off
-  - trigger: state
+  - platform: state
     entity_id: !input room_state
     to: "LowLights"
     for:
@@ -118,60 +121,66 @@ triggers:
     id: lowlights_timeout
 
   # State helper changed
-  - trigger: state
+  - platform: state
     entity_id: !input room_state
     id: room_state_changed
 
-  # Manual toggle button
-  - trigger: device
+  # Ubisys D1 button
+  - platform: device
     device_id: !input toggle_device
     domain: mqtt
     type: action
     subtype: toggle_s2
     id: manual_toggle
 
-conditions: []
+condition: []
 
-actions:
+action:
   - choose:
 
-      # Manual toggle while Off -> On
+      # Manual toggle: Off -> On
       - conditions:
           - condition: trigger
             id: manual_toggle
+
           - condition: template
             value_template: >
               {{ states(room_state_entity) == 'Off' }}
+
         sequence:
-          - action: input_select.select_option
+          - service: input_select.select_option
             target:
               entity_id: !input room_state
             data:
               option: "On"
 
-      # Manual toggle while On -> Off
+      # Manual toggle: On -> Off
       - conditions:
           - condition: trigger
             id: manual_toggle
+
           - condition: template
             value_template: >
               {{ states(room_state_entity) == 'On' }}
+
         sequence:
-          - action: input_select.select_option
+          - service: input_select.select_option
             target:
               entity_id: !input room_state
             data:
               option: "Off"
 
-      # Manual toggle while LowLights -> On
+      # Manual toggle: LowLights -> On
       - conditions:
           - condition: trigger
             id: manual_toggle
+
           - condition: template
             value_template: >
               {{ states(room_state_entity) == 'LowLights' }}
+
         sequence:
-          - action: input_select.select_option
+          - service: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -181,6 +190,7 @@ actions:
       - conditions:
           - condition: trigger
             id: motion_on
+
           - condition: template
             value_template: >
               {{ states(room_state_entity) == 'Off' }}
@@ -188,12 +198,13 @@ actions:
           - condition: template
             value_template: >
               {{
-                lux_limit | int(0) == 0
+                lux_limit_value | int(0) == 0
                 or lux_sensor_entity == ''
-                or states(lux_sensor_entity) | float(0) < lux_limit | float(0)
+                or states(lux_sensor_entity) | float(0) < lux_limit_value | float(0)
               }}
+
         sequence:
-          - action: input_select.select_option
+          - service: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -203,11 +214,13 @@ actions:
       - conditions:
           - condition: trigger
             id: motion_on
+
           - condition: template
             value_template: >
               {{ states(room_state_entity) == 'LowLights' }}
+
         sequence:
-          - action: input_select.select_option
+          - service: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -217,11 +230,13 @@ actions:
       - conditions:
           - condition: trigger
             id: motion_off
+
           - condition: template
             value_template: >
               {{ states(room_state_entity) == 'On' }}
+
         sequence:
-          - action: input_select.select_option
+          - service: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -231,8 +246,9 @@ actions:
       - conditions:
           - condition: trigger
             id: lowlights_timeout
+
         sequence:
-          - action: input_select.select_option
+          - service: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -242,22 +258,26 @@ actions:
       - conditions:
           - condition: trigger
             id: room_state_changed
+
           - condition: template
             value_template: >
               {{ trigger.to_state.state == 'Off' }}
+
         sequence:
-          - action: light.turn_off
+          - service: light.turn_off
             target: !input light_target
 
       # Entered On
       - conditions:
           - condition: trigger
             id: room_state_changed
+
           - condition: template
             value_template: >
               {{ trigger.to_state.state == 'On' }}
+
         sequence:
-          - action: light.turn_on
+          - service: light.turn_on
             target: !input light_target
             data:
               brightness_pct: 100
@@ -266,11 +286,13 @@ actions:
       - conditions:
           - condition: trigger
             id: room_state_changed
+
           - condition: template
             value_template: >
               {{ trigger.to_state.state == 'LowLights' }}
+
         sequence:
-          - action: light.turn_on
+          - service: light.turn_on
             target: !input light_target
             data:
               brightness_pct: !input low_brightness_value
