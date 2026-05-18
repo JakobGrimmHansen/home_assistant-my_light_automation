@@ -127,7 +127,7 @@ triggers:
     device_id: !input toggle_device
     domain: mqtt
     type: action
-    subtype: toggle_s2_action
+    subtype: toggle_s2
     id: manual_toggle
 
 conditions: []
