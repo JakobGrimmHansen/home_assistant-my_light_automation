@@ -108,7 +108,7 @@ trigger:
     id: room_state_changed
 
   # Manual toggle trigger(s)
-  - !input toggle_event
+  - triggers: !input toggle_event
 
 condition: []
 
