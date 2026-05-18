@@ -36,17 +36,14 @@ blueprint:
       selector:
         trigger:
 
-    motion_trigger:
-      name: Motion Trigger(s)
-      description: "Define your motion detected triggers here. Can be a single trigger or a list of triggers."
+    motion_sensor:
+      name: Motion Sensor / Group
+      description: The motion binary sensor or group that detects occupancy.
       selector:
-        trigger:
-
-    no_motion_trigger:
-      name: No Motion Trigger(s)
-      description: "Define your no-motion / cleared triggers here. Can be a single trigger or a list of triggers."
-      selector:
-        trigger:
+        entity:
+          domain:
+            - binary_sensor
+            - group
 
     no_motion_wait:
       name: No Motion Delay (Seconds)
@@ -93,11 +90,17 @@ trigger:
     id: button_pressed
 
   # Motion detected
-  - trigger: !input motion_trigger
+  - platform: state
+    entity_id: !input motion_sensor
+    to: "on"
     id: motion_detected
 
-  # No motion detected
-  - trigger: !input no_motion_trigger
+  # No motion timeout
+  - platform: state
+    entity_id: !input motion_sensor
+    to: "off"
+    for:
+      seconds: !input no_motion_wait
     id: no_motion_timeout
 
   # State helper changed
