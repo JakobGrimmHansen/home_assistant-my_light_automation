@@ -1,18 +1,12 @@
 blueprint:
   name: Room Light State Machine v2
-  description: >-
-    Room lighting state machine with:
-      - Manual toggle button
-      - Motion activation
-      - Automatic dimming after inactivity
-      - Lux-aware motion activation
+  description: Room lighting automation with motion and manual toggle support.
 
   domain: automation
 
   input:
     room_state:
       name: Room State Helper
-      description: Input select containing Off, On and LowLights.
       selector:
         entity:
           domain: input_select
@@ -26,7 +20,6 @@ blueprint:
 
     motion_sensor:
       name: Motion Sensor or Group
-      description: Motion sensor, occupancy sensor, or grouped sensor.
       selector:
         entity:
           filter:
@@ -35,13 +28,12 @@ blueprint:
 
     toggle_device:
       name: Toggle Device
-      description: Ubisys D1 or other Zigbee button device.
+      description: Ubisys D1 dimmer/button device.
       selector:
         device: {}
 
     no_motion_wait:
       name: No Motion Wait Time
-      description: Seconds after motion stops before entering LowLights.
       default: 300
       selector:
         number:
@@ -52,7 +44,6 @@ blueprint:
 
     lux_sensor:
       name: Lux Sensor
-      description: Optional lux sensor used to prevent activation in bright rooms.
       default: ""
       selector:
         entity:
@@ -60,13 +51,11 @@ blueprint:
 
     lux_limit:
       name: Lux Limit
-      description: Motion only turns lights on below this lux value. Set 0 to disable.
       default: 0
       selector:
         number:
           min: 0
           max: 10000
-          mode: box
 
     low_brightness_value:
       name: Low Light Brightness %
@@ -75,7 +64,6 @@ blueprint:
         number:
           min: 1
           max: 100
-          unit_of_measurement: "%"
 
 mode: restart
 
@@ -83,16 +71,13 @@ variables:
   room_state_entity: !input room_state
   lux_sensor_entity: !input lux_sensor
   lux_limit: !input lux_limit
-  low_brightness_value: !input low_brightness_value
 
 triggers:
-  # Motion detected
   - trigger: state
     entity_id: !input motion_sensor
     to: "on"
     id: motion_on
 
-  # No motion timeout
   - trigger: state
     entity_id: !input motion_sensor
     to: "off"
@@ -100,12 +85,10 @@ triggers:
       seconds: !input no_motion_wait
     id: motion_off
 
-  # State helper changed
   - trigger: state
     entity_id: !input room_state
     id: room_state_changed
 
-  # Manual toggle button
   - trigger: device
     device_id: !input toggle_device
     domain: mqtt
@@ -118,14 +101,12 @@ conditions: []
 actions:
   - choose:
 
-      # Manual toggle while Off -> On
       - conditions:
+          - condition: trigger
+            id: manual_toggle
           - condition: template
-            value_template: >-
-              {{
-                trigger.id == 'manual_toggle'
-                and states(room_state_entity) == 'Off'
-              }}
+            value_template: >
+              {{ states(room_state_entity) == 'Off' }}
         sequence:
           - action: input_select.select_option
             target:
@@ -133,14 +114,12 @@ actions:
             data:
               option: "On"
 
-      # Manual toggle while On/LowLights -> Off
       - conditions:
+          - condition: trigger
+            id: manual_toggle
           - condition: template
-            value_template: >-
-              {{
-                trigger.id == 'manual_toggle'
-                and states(room_state_entity) in ['On', 'LowLights']
-              }}
+            value_template: >
+              {{ states(room_state_entity) in ['On', 'LowLights'] }}
         sequence:
           - action: input_select.select_option
             target:
@@ -148,17 +127,14 @@ actions:
             data:
               option: "Off"
 
-      # Motion while Off -> On
       - conditions:
           - condition: trigger
             id: motion_on
-
           - condition: template
-            value_template: >-
+            value_template: >
               {{ states(room_state_entity) == 'Off' }}
-
           - condition: template
-            value_template: >-
+            value_template: >
               {{
                 lux_limit | int(0) == 0
                 or lux_sensor_entity == ''
@@ -171,13 +147,11 @@ actions:
             data:
               option: "On"
 
-      # No motion -> LowLights
       - conditions:
           - condition: trigger
             id: motion_off
-
           - condition: template
-            value_template: >-
+            value_template: >
               {{ states(room_state_entity) == 'On' }}
         sequence:
           - action: input_select.select_option
@@ -186,25 +160,21 @@ actions:
             data:
               option: "LowLights"
 
-      # Entered Off
       - conditions:
           - condition: trigger
             id: room_state_changed
-
           - condition: template
-            value_template: >-
+            value_template: >
               {{ trigger.to_state.state == 'Off' }}
         sequence:
           - action: light.turn_off
             target: !input light_target
 
-      # Entered On
       - conditions:
           - condition: trigger
             id: room_state_changed
-
           - condition: template
-            value_template: >-
+            value_template: >
               {{ trigger.to_state.state == 'On' }}
         sequence:
           - action: light.turn_on
@@ -212,13 +182,11 @@ actions:
             data:
               brightness_pct: 100
 
-      # Entered LowLights
       - conditions:
           - condition: trigger
             id: room_state_changed
-
           - condition: template
-            value_template: >-
+            value_template: >
               {{ trigger.to_state.state == 'LowLights' }}
         sequence:
           - action: light.turn_on
