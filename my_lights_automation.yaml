@@ -13,6 +13,7 @@ blueprint:
   input:
     room_state:
       name: Room State Helper
+      description: Input select containing Off, On and LowLights.
       selector:
         entity:
           domain: input_select
@@ -26,6 +27,7 @@ blueprint:
 
     motion_sensor:
       name: Motion Sensor or Group
+      description: Motion sensor, occupancy sensor, or grouped sensor.
       selector:
         entity:
           filter:
@@ -62,6 +64,7 @@ blueprint:
 
     lux_sensor:
       name: Lux Sensor
+      description: Optional lux sensor used to prevent activation in bright rooms.
       default: ""
       selector:
         entity:
@@ -146,19 +149,33 @@ actions:
             data:
               option: "On"
 
-      # Manual toggle while On/LowLights -> Off
+      # Manual toggle while On -> Off
       - conditions:
           - condition: trigger
             id: manual_toggle
           - condition: template
             value_template: >
-              {{ states(room_state_entity) in ['On', 'LowLights'] }}
+              {{ states(room_state_entity) == 'On' }}
         sequence:
           - action: input_select.select_option
             target:
               entity_id: !input room_state
             data:
               option: "Off"
+
+      # Manual toggle while LowLights -> On
+      - conditions:
+          - condition: trigger
+            id: manual_toggle
+          - condition: template
+            value_template: >
+              {{ states(room_state_entity) == 'LowLights' }}
+        sequence:
+          - action: input_select.select_option
+            target:
+              entity_id: !input room_state
+            data:
+              option: "On"
 
       # Motion while Off -> On
       - conditions:
@@ -167,6 +184,7 @@ actions:
           - condition: template
             value_template: >
               {{ states(room_state_entity) == 'Off' }}
+
           - condition: template
             value_template: >
               {{
@@ -181,7 +199,7 @@ actions:
             data:
               option: "On"
 
-      # Motion detected while LowLights -> back to On
+      # Motion while LowLights -> On
       - conditions:
           - condition: trigger
             id: motion_on
