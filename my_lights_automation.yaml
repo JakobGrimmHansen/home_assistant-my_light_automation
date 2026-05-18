@@ -26,7 +26,7 @@ blueprint:
 
     motion_sensor:
       name: Motion Sensor or Group
-      description: Motion sensor, occupancy sensor, or sensor group.
+      description: Motion sensor, occupancy sensor, or grouped sensor.
       selector:
         entity:
           filter:
@@ -35,6 +35,7 @@ blueprint:
 
     no_motion_wait:
       name: No Motion Wait Time
+      description: Seconds after motion stops before entering LowLights.
       default: 300
       selector:
         number:
@@ -45,6 +46,7 @@ blueprint:
 
     lux_sensor:
       name: Lux Sensor
+      description: Optional lux sensor used to prevent activation in bright rooms.
       default: ""
       selector:
         entity:
@@ -86,18 +88,14 @@ variables:
   low_brightness_value: !input low_brightness_value
 
 trigger:
-  # Manual toggle trigger(s)
-  - triggers: !input toggle_event
-    id: manual_toggle
-
   # Motion detected
-  - trigger: state
+  - platform: state
     entity_id: !input motion_sensor
     to: "on"
     id: motion_on
 
   # No motion timeout
-  - trigger: state
+  - platform: state
     entity_id: !input motion_sensor
     to: "off"
     for:
@@ -105,9 +103,12 @@ trigger:
     id: motion_off
 
   # State helper changed
-  - trigger: state
+  - platform: state
     entity_id: !input room_state
     id: room_state_changed
+
+  # Manual toggle trigger(s)
+  - !input toggle_event
 
 condition: []
 
@@ -119,7 +120,7 @@ action:
           - condition: template
             value_template: >-
               {{
-                trigger.id == 'manual_toggle'
+                trigger.platform != 'state'
                 and states(room_state_entity) == 'Off'
               }}
         sequence:
@@ -134,7 +135,7 @@ action:
           - condition: template
             value_template: >-
               {{
-                trigger.id == 'manual_toggle'
+                trigger.platform != 'state'
                 and states(room_state_entity) in ['On', 'LowLights']
               }}
         sequence:
