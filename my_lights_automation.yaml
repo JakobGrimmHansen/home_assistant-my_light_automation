@@ -1,11 +1,11 @@
 blueprint:
-  name: Room Light State Machine v4
+  name: Room Light State Machine v5
   description: >-
-    Modern room lighting state machine with:
-      - Manual button toggle
-      - Motion activation
-      - Automatic dimming after inactivity
-      - Automatic off after low-light timeout
+    Advanced room lighting state machine with:
+      - Automatic motion lighting
+      - Manual override states
+      - Auto dimming
+      - Triple-toggle gesture detection
       - Lux-aware activation
 
   domain: automation
@@ -13,7 +13,13 @@ blueprint:
   input:
     room_state:
       name: Room State Helper
-      description: Input select containing Off, On and LowLights.
+      description: >-
+        Input select containing:
+          - auto_off
+          - auto_on
+          - auto_dimmed
+          - manual_on
+          - manual_off
       selector:
         entity:
           domain: input_select
@@ -27,7 +33,6 @@ blueprint:
 
     motion_sensor:
       name: Motion Sensor or Group
-      description: Motion sensor, occupancy sensor, or grouped sensor.
       selector:
         entity:
           filter:
@@ -36,13 +41,12 @@ blueprint:
 
     toggle_device:
       name: Toggle Device
-      description: Ubisys D1 button/dimmer device.
+      description: Ubisys D1 device.
       selector:
         device: {}
 
     no_motion_wait:
-      name: Time Before LowLights
-      description: Seconds after no motion before entering LowLights.
+      name: Time Before Auto Dimmed
       default: 300
       selector:
         number:
@@ -51,9 +55,8 @@ blueprint:
           unit_of_measurement: seconds
           mode: box
 
-    low_lights_timeout:
-      name: Time Before Off
-      description: Seconds to stay in LowLights before turning Off.
+    auto_off_wait:
+      name: Time Before Auto Off
       default: 120
       selector:
         number:
@@ -64,7 +67,6 @@ blueprint:
 
     lux_sensor:
       name: Lux Sensor
-      description: Optional lux sensor.
       default: ""
       selector:
         entity:
@@ -72,16 +74,14 @@ blueprint:
 
     lux_limit:
       name: Lux Limit
-      description: Motion only turns lights on below this lux value. Set 0 to disable.
       default: 0
       selector:
         number:
           min: 0
           max: 10000
-          mode: box
 
-    low_brightness_value:
-      name: Low Light Brightness %
+    auto_dimmed_brightness:
+      name: Auto Dimmed Brightness %
       default: 20
       selector:
         number:
@@ -95,7 +95,7 @@ variables:
   room_state_entity: !input room_state
   lux_sensor_entity: !input lux_sensor
   lux_limit_value: !input lux_limit
-  low_brightness: !input low_brightness_value
+  dimmed_brightness: !input auto_dimmed_brightness
 
 trigger:
   # Motion detected
@@ -104,7 +104,7 @@ trigger:
     to: "on"
     id: motion_on
 
-  # No motion -> LowLights
+  # No motion -> auto_dimmed
   - platform: state
     entity_id: !input motion_sensor
     to: "off"
@@ -112,20 +112,20 @@ trigger:
       seconds: !input no_motion_wait
     id: motion_off
 
-  # LowLights timeout -> Off
+  # auto_dimmed timeout -> auto_off
   - platform: state
     entity_id: !input room_state
-    to: "LowLights"
+    to: "auto_dimmed"
     for:
-      seconds: !input low_lights_timeout
-    id: lowlights_timeout
+      seconds: !input auto_off_wait
+    id: auto_dimmed_timeout
 
   # State helper changed
   - platform: state
     entity_id: !input room_state
     id: room_state_changed
 
-  # Ubisys D1 button
+  # Single manual toggle
   - platform: device
     device_id: !input toggle_device
     domain: mqtt
@@ -133,67 +133,137 @@ trigger:
     subtype: toggle_s2
     id: manual_toggle
 
+  # Triple toggle gesture
+  - platform: device
+    device_id: !input toggle_device
+    domain: mqtt
+    type: action
+    subtype: toggle_s2
+    id: triple_toggle
+
 condition: []
 
 action:
   - choose:
 
-      # Manual toggle: Off -> On
+      #########################################################
+      # TRIPLE TOGGLE -> auto_dimmed
+      #########################################################
+
+      - conditions:
+          - condition: trigger
+            id: triple_toggle
+        sequence:
+          - wait_for_trigger:
+              - platform: device
+                device_id: !input toggle_device
+                domain: mqtt
+                type: action
+                subtype: toggle_s2
+            timeout: "00:00:01"
+            continue_on_timeout: false
+
+          - wait_for_trigger:
+              - platform: device
+                device_id: !input toggle_device
+                domain: mqtt
+                type: action
+                subtype: toggle_s2
+            timeout: "00:00:01"
+            continue_on_timeout: false
+
+          - service: input_select.select_option
+            target:
+              entity_id: !input room_state
+            data:
+              option: "auto_dimmed"
+
+      #########################################################
+      # MANUAL TRANSITIONS
+      #########################################################
+
+      # auto_on -> manual_off
       - conditions:
           - condition: trigger
             id: manual_toggle
-
           - condition: template
             value_template: >
-              {{ states(room_state_entity) == 'Off' }}
-
+              {{ states(room_state_entity) == 'auto_on' }}
         sequence:
           - service: input_select.select_option
             target:
               entity_id: !input room_state
             data:
-              option: "On"
+              option: "manual_off"
 
-      # Manual toggle: On -> Off
+      # auto_off -> manual_on
       - conditions:
           - condition: trigger
             id: manual_toggle
-
           - condition: template
             value_template: >
-              {{ states(room_state_entity) == 'On' }}
-
+              {{ states(room_state_entity) == 'auto_off' }}
         sequence:
           - service: input_select.select_option
             target:
               entity_id: !input room_state
             data:
-              option: "Off"
+              option: "manual_on"
 
-      # Manual toggle: LowLights -> On
+      # auto_dimmed -> manual_off
       - conditions:
           - condition: trigger
             id: manual_toggle
-
           - condition: template
             value_template: >
-              {{ states(room_state_entity) == 'LowLights' }}
-
+              {{ states(room_state_entity) == 'auto_dimmed' }}
         sequence:
           - service: input_select.select_option
             target:
               entity_id: !input room_state
             data:
-              option: "On"
+              option: "manual_off"
 
-      # Motion while Off -> On
+      # manual_off -> manual_on
+      - conditions:
+          - condition: trigger
+            id: manual_toggle
+          - condition: template
+            value_template: >
+              {{ states(room_state_entity) == 'manual_off' }}
+        sequence:
+          - service: input_select.select_option
+            target:
+              entity_id: !input room_state
+            data:
+              option: "manual_on"
+
+      # manual_on -> manual_off
+      - conditions:
+          - condition: trigger
+            id: manual_toggle
+          - condition: template
+            value_template: >
+              {{ states(room_state_entity) == 'manual_on' }}
+        sequence:
+          - service: input_select.select_option
+            target:
+              entity_id: !input room_state
+            data:
+              option: "manual_off"
+
+      #########################################################
+      # AUTO MOTION LOGIC
+      #########################################################
+
+      # Motion while auto_off -> auto_on
       - conditions:
           - condition: trigger
             id: motion_on
 
           - condition: template
             value_template: >
-              {{ states(room_state_entity) == 'Off' }}
+              {{ states(room_state_entity) == 'auto_off' }}
 
           - condition: template
             value_template: >
@@ -202,97 +272,120 @@ action:
                 or lux_sensor_entity == ''
                 or states(lux_sensor_entity) | float(0) < lux_limit_value | float(0)
               }}
-
         sequence:
           - service: input_select.select_option
             target:
               entity_id: !input room_state
             data:
-              option: "On"
+              option: "auto_on"
 
-      # Motion while LowLights -> On
+      # Motion while auto_dimmed -> auto_on
       - conditions:
           - condition: trigger
             id: motion_on
 
           - condition: template
             value_template: >
-              {{ states(room_state_entity) == 'LowLights' }}
-
+              {{ states(room_state_entity) == 'auto_dimmed' }}
         sequence:
           - service: input_select.select_option
             target:
               entity_id: !input room_state
             data:
-              option: "On"
+              option: "auto_on"
 
-      # No motion -> LowLights
+      # No motion while auto_on -> auto_dimmed
       - conditions:
           - condition: trigger
             id: motion_off
 
           - condition: template
             value_template: >
-              {{ states(room_state_entity) == 'On' }}
-
+              {{ states(room_state_entity) == 'auto_on' }}
         sequence:
           - service: input_select.select_option
             target:
               entity_id: !input room_state
             data:
-              option: "LowLights"
+              option: "auto_dimmed"
 
-      # LowLights timeout -> Off
+      # auto_dimmed timeout -> auto_off
       - conditions:
           - condition: trigger
-            id: lowlights_timeout
-
+            id: auto_dimmed_timeout
         sequence:
           - service: input_select.select_option
             target:
               entity_id: !input room_state
             data:
-              option: "Off"
+              option: "auto_off"
 
-      # Entered Off
+      #########################################################
+      # LIGHT OUTPUTS
+      #########################################################
+
+      # auto_off
       - conditions:
           - condition: trigger
             id: room_state_changed
 
           - condition: template
             value_template: >
-              {{ trigger.to_state.state == 'Off' }}
-
+              {{ trigger.to_state.state == 'auto_off' }}
         sequence:
           - service: light.turn_off
             target: !input light_target
 
-      # Entered On
+      # manual_off
       - conditions:
           - condition: trigger
             id: room_state_changed
 
           - condition: template
             value_template: >
-              {{ trigger.to_state.state == 'On' }}
+              {{ trigger.to_state.state == 'manual_off' }}
+        sequence:
+          - service: light.turn_off
+            target: !input light_target
 
+      # auto_on
+      - conditions:
+          - condition: trigger
+            id: room_state_changed
+
+          - condition: template
+            value_template: >
+              {{ trigger.to_state.state == 'auto_on' }}
         sequence:
           - service: light.turn_on
             target: !input light_target
             data:
               brightness_pct: 100
 
-      # Entered LowLights
+      # manual_on
       - conditions:
           - condition: trigger
             id: room_state_changed
 
           - condition: template
             value_template: >
-              {{ trigger.to_state.state == 'LowLights' }}
-
+              {{ trigger.to_state.state == 'manual_on' }}
         sequence:
           - service: light.turn_on
             target: !input light_target
             data:
-              brightness_pct: !input low_brightness_value
+              brightness_pct: 100
+
+      # auto_dimmed
+      - conditions:
+          - condition: trigger
+            id: room_state_changed
+
+          - condition: template
+            value_template: >
+              {{ trigger.to_state.state == 'auto_dimmed' }}
+        sequence:
+          - service: light.turn_on
+            target: !input light_target
+            data:
+              brightness_pct: !input auto_dimmed_brightness
