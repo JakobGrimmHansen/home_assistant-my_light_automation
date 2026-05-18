@@ -86,8 +86,7 @@ variables:
 
 trigger:
   # Button trigger(s)
-  - trigger: !input custom_button_trigger
-    id: button_pressed
+  - !input custom_button_trigger
 
   # Motion detected
   - platform: state
@@ -115,8 +114,8 @@ action:
 
       # Button pressed while Off -> On
       - conditions:
-          - condition: trigger
-            id: button_pressed
+          - condition: template
+            value_template: "{{ trigger.id == 'button_pressed' }}"
           - condition: template
             value_template: "{{ states(state_helper_entity) == 'Off' }}"
         sequence:
@@ -128,8 +127,8 @@ action:
 
       # Button pressed while On or LowLights -> Off
       - conditions:
-          - condition: trigger
-            id: button_pressed
+          - condition: template
+            value_template: "{{ trigger.id == 'button_pressed' }}"
           - condition: template
             value_template: "{{ states(state_helper_entity) in ['On', 'LowLights'] }}"
         sequence:
