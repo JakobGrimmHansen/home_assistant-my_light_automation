@@ -31,63 +31,8 @@ blueprint:
           mode: slider
 
     custom_button_trigger:
-      name: Button Trigger(s)
-      description: "Define your custom device/MQTT triggers here. Can be a single trigger or a list of triggers."
-      selector:
-        trigger:
-
-    motion_sensor:
-      name: Motion Sensor / Group
-      description: The motion binary sensor or group that detects occupancy.
-      selector:
-        entity:
-          domain:
-            - binary_sensor
-            - group
-
-    no_motion_wait:
-      name: No Motion Delay (Seconds)
-      description: How long to wait after no motion is detected before transitioning from On to LowLights.
-      default: 120
-      selector:
-        number:
-          min: 0
-          max: 3600
-          unit_of_measurement: "s"
-          mode: box
-
-    lux_sensor:
-      name: Lux Sensor (Optional)
-      description: Illuminance sensor to check light levels before turning lights on via motion.
-      default: ""
-      selector:
-        entity:
-          domain: sensor
-          device_class: illuminance
-
-    lux_threshold:
-      name: Lux Threshold (Optional)
-      description: Only turn on lights via motion if the Lux level is BELOW this value. Leave at 0 to disable this check.
-      default: 0
-      selector:
-        number:
-          min: 0
-          max: 1000
-          unit_of_measurement: "lx"
-          mode: box
-
-mode: restart
-
-variables:
-  state_helper_entity: !input state_helper
-  lux_sensor_entity: !input lux_sensor
-  lux_limit: !input lux_threshold
-  low_brightness_value: !input low_brightness
-
-trigger:
-  # Button trigger(s)
-  - triggers: !input custom_button_trigger
-    id: button_pressed
+  # Custom button trigger(s) from blueprint input
+  !input custom_button_trigger
 
   # Motion detected
   - platform: state
