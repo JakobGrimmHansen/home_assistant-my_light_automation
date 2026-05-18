@@ -30,9 +30,10 @@ blueprint:
         Event/device triggers that should toggle the room lights.
         Example: Zigbee button press, MQTT action event, remote click.
       selector:
-        triggers:
+        trigger:
   # Manual toggle trigger(s)
   - triggers: !input toggle_event
+    id: manual_toggle
 
   # Motion detected
   - trigger: state
