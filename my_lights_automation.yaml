@@ -41,8 +41,9 @@ blueprint:
       description: The motion binary sensor (or group) that detects occupancy.
       selector:
         entity:
-          domain: binary_sensor
-          device_class: motion
+          domain:
+            - binary_sensor
+            - group
 
     no_motion_wait:
       name: No Motion Delay (Seconds)
