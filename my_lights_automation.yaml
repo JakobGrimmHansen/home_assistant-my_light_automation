@@ -1,6 +1,12 @@
 blueprint:
-  name: Room Light State Machine v2
-  description: Room lighting automation with motion and manual toggle support.
+  name: Room Light State Machine v3
+  description: >-
+    Room lighting automation with:
+      - Manual toggle button
+      - Motion activation
+      - Automatic dimming after inactivity
+      - Automatic off after low-light timeout
+      - Lux-aware motion activation
 
   domain: automation
 
@@ -33,8 +39,20 @@ blueprint:
         device: {}
 
     no_motion_wait:
-      name: No Motion Wait Time
+      name: Time Before LowLights
+      description: Seconds after motion stops before entering LowLights.
       default: 300
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: seconds
+          mode: box
+
+    low_lights_timeout:
+      name: Time Before Off
+      description: Seconds to stay in LowLights before turning Off.
+      default: 120
       selector:
         number:
           min: 0
@@ -51,6 +69,7 @@ blueprint:
 
     lux_limit:
       name: Lux Limit
+      description: Motion only turns lights on below this lux value. Set 0 to disable.
       default: 0
       selector:
         number:
@@ -73,11 +92,13 @@ variables:
   lux_limit: !input lux_limit
 
 triggers:
+  # Motion detected
   - trigger: state
     entity_id: !input motion_sensor
     to: "on"
     id: motion_on
 
+  # No motion timeout -> LowLights
   - trigger: state
     entity_id: !input motion_sensor
     to: "off"
@@ -85,10 +106,20 @@ triggers:
       seconds: !input no_motion_wait
     id: motion_off
 
+  # LowLights timeout -> Off
+  - trigger: state
+    entity_id: !input room_state
+    to: "LowLights"
+    for:
+      seconds: !input low_lights_timeout
+    id: lowlights_timeout
+
+  # State helper changed
   - trigger: state
     entity_id: !input room_state
     id: room_state_changed
 
+  # Manual toggle button
   - trigger: device
     device_id: !input toggle_device
     domain: mqtt
@@ -101,6 +132,7 @@ conditions: []
 actions:
   - choose:
 
+      # Manual toggle while Off -> On
       - conditions:
           - condition: trigger
             id: manual_toggle
@@ -114,6 +146,7 @@ actions:
             data:
               option: "On"
 
+      # Manual toggle while On/LowLights -> Off
       - conditions:
           - condition: trigger
             id: manual_toggle
@@ -127,6 +160,7 @@ actions:
             data:
               option: "Off"
 
+      # Motion while Off -> On
       - conditions:
           - condition: trigger
             id: motion_on
@@ -147,6 +181,21 @@ actions:
             data:
               option: "On"
 
+      # Motion detected while LowLights -> back to On
+      - conditions:
+          - condition: trigger
+            id: motion_on
+          - condition: template
+            value_template: >
+              {{ states(room_state_entity) == 'LowLights' }}
+        sequence:
+          - action: input_select.select_option
+            target:
+              entity_id: !input room_state
+            data:
+              option: "On"
+
+      # No motion -> LowLights
       - conditions:
           - condition: trigger
             id: motion_off
@@ -160,6 +209,18 @@ actions:
             data:
               option: "LowLights"
 
+      # LowLights timeout -> Off
+      - conditions:
+          - condition: trigger
+            id: lowlights_timeout
+        sequence:
+          - action: input_select.select_option
+            target:
+              entity_id: !input room_state
+            data:
+              option: "Off"
+
+      # Entered Off
       - conditions:
           - condition: trigger
             id: room_state_changed
@@ -170,6 +231,7 @@ actions:
           - action: light.turn_off
             target: !input light_target
 
+      # Entered On
       - conditions:
           - condition: trigger
             id: room_state_changed
@@ -182,6 +244,7 @@ actions:
             data:
               brightness_pct: 100
 
+      # Entered LowLights
       - conditions:
           - condition: trigger
             id: room_state_changed
