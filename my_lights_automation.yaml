@@ -4,29 +4,60 @@ blueprint:
     Advanced room lighting state machine with:
       - Automatic motion lighting
       - Manual override states
-      - Auto dimming
-      - Dimmer gesture detection
+      - Automatic dimming
       - Lux-aware activation
       - Smooth light transitions
+      - Automatic/manual mode switching
 
   domain: automation
 
   input:
+
     room_state:
       name: Room State Helper
       description: >-
-        Input select containing:
+        Input select used internally by the state machine.
+
+        Required options:
           - auto_off
           - auto_on
           - auto_dimmed
           - manual_on
           - manual_off
+
+        State meanings:
+
+          auto_off:
+            Room is automatically off and motion may reactivate lighting.
+
+          auto_on:
+            Room is automatically lit due to occupancy/motion.
+
+          auto_dimmed:
+            Transitional automatic dimmed state before turning off.
+
+          manual_on:
+            User manually forced lights on.
+            Motion automation will not turn lights off.
+
+          manual_off:
+            User manually forced lights off.
+            Motion automation will not turn lights on.
+
       selector:
         entity:
           domain: input_select
 
     light_target:
       name: Light Target
+      description: >-
+        Light or group of lights controlled by this room state machine.
+
+        Supports:
+          - single lights
+          - light groups
+          - areas
+
       selector:
         target:
           entity:
@@ -34,6 +65,18 @@ blueprint:
 
     motion_sensor:
       name: Motion Sensor or Group
+      description: >-
+        Motion or occupancy sensor controlling automatic lighting.
+
+        Supported:
+          - motion sensors
+          - occupancy sensors
+          - binary sensor groups
+
+        Sensor must report:
+          - on = occupied/motion
+          - off = clear/no motion
+
       selector:
         entity:
           filter:
@@ -42,13 +85,34 @@ blueprint:
 
     toggle_device:
       name: Toggle Device
-      description: Ubisys D1 device.
+      description: >-
+        Manual wall switch, dimmer, or button device.
+
+        Expected MQTT actions:
+          - toggle_s2
+          - brightness_move_up_s2
+          - brightness_move_down_s2
+
+        Example devices:
+          - Ubisys D1
+          - Zigbee wall remotes
+          - MQTT dimmers
+
       selector:
         device: {}
 
     no_motion_wait:
       name: Time Before Auto Dimmed
+      description: >-
+        Time without occupancy before transitioning:
+
+          auto_on -> auto_dimmed
+
+        Example:
+          300 seconds = 5 minutes
+
       default: 300
+
       selector:
         number:
           min: 0
@@ -58,7 +122,16 @@ blueprint:
 
     auto_off_wait:
       name: Time Before Auto Off
+      description: >-
+        Time spent in auto_dimmed before transitioning:
+
+          auto_dimmed -> auto_off
+
+        Example:
+          120 seconds = 2 minutes
+
       default: 120
+
       selector:
         number:
           min: 0
@@ -68,14 +141,31 @@ blueprint:
 
     lux_sensor:
       name: Lux Sensor
+      description: >-
+        Optional brightness sensor used to prevent lights from
+        automatically turning on when the room is already bright.
+
+        Leave empty to disable lux-based activation logic.
+
       default: ""
+
       selector:
         entity:
           domain: sensor
 
     lux_limit:
       name: Lux Limit
+      description: >-
+        Maximum lux value allowed for automatic activation.
+
+        If current lux is ABOVE this value:
+          motion will NOT turn lights on.
+
+        Set to:
+          0 = disable lux checking entirely
+
       default: 0
+
       selector:
         number:
           min: 0
@@ -83,7 +173,14 @@ blueprint:
 
     auto_dimmed_brightness:
       name: Auto Dimmed Brightness %
+      description: >-
+        Brightness level used during the auto_dimmed state.
+
+        Example:
+          20 = softly dimmed transitional lighting
+
       default: 20
+
       selector:
         number:
           min: 1
@@ -92,8 +189,16 @@ blueprint:
 
     transition_time:
       name: Light Transition Time
-      description: Transition time for light changes.
+      description: >-
+        Fade duration used for all brightness and on/off transitions.
+
+        Examples:
+          0 = instant changes
+          1 = quick smooth fade
+          5 = slow cinematic fade
+
       default: 1
+
       selector:
         number:
           min: 0
@@ -112,6 +217,7 @@ variables:
   transition_time_value: !input transition_time
 
 trigger:
+
   # Motion detected
   - platform: state
     entity_id: !input motion_sensor
@@ -153,7 +259,7 @@ trigger:
     domain: mqtt
     type: action
     subtype: brightness_move_up_s2
-    id: auto_dimmed_trigger_up
+    id: auto_mode_trigger_up
 
   # Dimmer gesture down
   - platform: device
@@ -161,48 +267,49 @@ trigger:
     domain: mqtt
     type: action
     subtype: brightness_move_down_s2
-    id: auto_dimmed_trigger_down
+    id: auto_mode_trigger_down
 
 condition: []
 
 action:
   - choose:
 
-#########################################################
-# DIMMER GESTURE -> auto_on / auto_off
-#########################################################
+      #########################################################
+      # DIMMER GESTURE -> RETURN TO AUTO MODE
+      #########################################################
 
-- conditions:
-    - condition: or
-      conditions:
-        - condition: trigger
-          id: auto_dimmed_trigger_up
-        - condition: trigger
-          id: auto_dimmed_trigger_down
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: auto_mode_trigger_up
+              - condition: trigger
+                id: auto_mode_trigger_down
 
-  sequence:
-    - choose:
+        sequence:
+          - choose:
 
-        # Occupied -> auto_on
-        - conditions:
-            - condition: state
-              entity_id: !input motion_sensor
-              state: "on"
+              # Occupied -> auto_on
+              - conditions:
+                  - condition: state
+                    entity_id: !input motion_sensor
+                    state: "on"
 
-          sequence:
-            - service: input_select.select_option
-              target:
-                entity_id: !input room_state
-              data:
-                option: "auto_on"
+                sequence:
+                  - service: input_select.select_option
+                    target:
+                      entity_id: !input room_state
+                    data:
+                      option: "auto_on"
 
-      default:
-        # Not occupied -> auto_off
-        - service: input_select.select_option
-          target:
-            entity_id: !input room_state
-          data:
-            option: "auto_off"
+            default:
+              # Not occupied -> auto_off
+              - service: input_select.select_option
+                target:
+                  entity_id: !input room_state
+                data:
+                  option: "auto_off"
+
       #########################################################
       # MANUAL TRANSITIONS
       #########################################################
