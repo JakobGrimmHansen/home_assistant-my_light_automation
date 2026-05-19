@@ -168,24 +168,41 @@ condition: []
 action:
   - choose:
 
-      #########################################################
-      # DIMMER GESTURE -> auto_dimmed
-      #########################################################
+#########################################################
+# DIMMER GESTURE -> auto_on / auto_off
+#########################################################
 
-      - conditions:
-          - condition: or
-            conditions:
-              - condition: trigger
-                id: auto_dimmed_trigger_up
-              - condition: trigger
-                id: auto_dimmed_trigger_down
-        sequence:
-          - service: input_select.select_option
-            target:
-              entity_id: !input room_state
-            data:
-              option: "auto_dimmed"
+- conditions:
+    - condition: or
+      conditions:
+        - condition: trigger
+          id: auto_dimmed_trigger_up
+        - condition: trigger
+          id: auto_dimmed_trigger_down
 
+  sequence:
+    - choose:
+
+        # Occupied -> auto_on
+        - conditions:
+            - condition: state
+              entity_id: !input motion_sensor
+              state: "on"
+
+          sequence:
+            - service: input_select.select_option
+              target:
+                entity_id: !input room_state
+              data:
+                option: "auto_on"
+
+      default:
+        # Not occupied -> auto_off
+        - service: input_select.select_option
+          target:
+            entity_id: !input room_state
+          data:
+            option: "auto_off"
       #########################################################
       # MANUAL TRANSITIONS
       #########################################################
