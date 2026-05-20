@@ -1,5 +1,5 @@
 blueprint:
-  name: Room Light State Machine v6
+  name: Room Light State Machine v7
   description: >-
     Advanced room lighting state machine with:
       - Automatic motion lighting
@@ -9,6 +9,7 @@ blueprint:
       - Smooth light transitions
       - Event-driven architecture
       - Hardware-independent button handling
+      - Time-based brightness profiles
 
   domain: automation
 
@@ -18,12 +19,7 @@ blueprint:
       name: Room Name
       description: >-
         Logical room identifier used for custom events.
-
-        Example:
-          living_room
-          bedroom
-          office
-
+        
         Must match the room value emitted by your
         button automations.
 
@@ -104,11 +100,7 @@ blueprint:
       name: Time Before Auto Dimmed
       description: >-
         Time without occupancy before transitioning:
-
           auto_on -> auto_dimmed
-
-        Example:
-          300 seconds = 5 minutes
 
       default: 300
 
@@ -123,11 +115,7 @@ blueprint:
       name: Time Before Auto Off
       description: >-
         Time spent in auto_dimmed before transitioning:
-
           auto_dimmed -> auto_off
-
-        Example:
-          120 seconds = 2 minutes
 
       default: 120
 
@@ -157,12 +145,6 @@ blueprint:
       description: >-
         Maximum lux value allowed for automatic activation.
 
-        If current lux is ABOVE this value:
-          motion will NOT turn lights on.
-
-        Set to:
-          0 = disable lux checking entirely
-
       default: 0
 
       selector:
@@ -170,13 +152,27 @@ blueprint:
           min: 0
           max: 10000
 
+    #########################################################
+    # BRIGHTNESS SETTINGS
+    #########################################################
+
+    auto_on_brightness:
+      name: Auto On Brightness %
+      description: >-
+        Default brightness level used during auto_on state.
+
+      default: 100
+
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+
     auto_dimmed_brightness:
       name: Auto Dimmed Brightness %
       description: >-
-        Brightness level used during the auto_dimmed state.
-
-        Example:
-          20 = softly dimmed transitional lighting
+        Brightness level used during auto_dimmed state.
 
       default: 20
 
@@ -186,15 +182,72 @@ blueprint:
           max: 100
           unit_of_measurement: "%"
 
+    #########################################################
+    # TIME-BASED BRIGHTNESS
+    #########################################################
+
+    timed_brightness_enabled:
+      name: Timed Brightness Enabled
+      description: >-
+        Enable alternate brightness levels during a fixed time window.
+
+      default: false
+
+      selector:
+        boolean:
+
+    timed_brightness_start:
+      name: Timed Brightness Start
+      description: Start time for alternate brightness mode.
+
+      default: "22:00:00"
+
+      selector:
+        time:
+
+    timed_brightness_end:
+      name: Timed Brightness End
+      description: End time for alternate brightness mode.
+
+      default: "06:00:00"
+
+      selector:
+        time:
+
+    timed_auto_on_brightness:
+      name: Timed Auto On Brightness %
+      description: >-
+        Auto_on brightness used during timed mode.
+
+      default: 30
+
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+
+    timed_auto_dimmed_brightness:
+      name: Timed Auto Dimmed Brightness %
+      description: >-
+        Auto_dimmed brightness used during timed mode.
+
+      default: 5
+
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+
+    #########################################################
+    # TRANSITION
+    #########################################################
+
     transition_time:
       name: Light Transition Time
       description: >-
         Fade duration used for all brightness and on/off transitions.
-
-        Examples:
-          0 = instant changes
-          1 = quick smooth fade
-          5 = slow cinematic fade
 
       default: 1
 
@@ -211,8 +264,48 @@ mode: restart
 variables:
   room_name_value: !input room_name
   room_state_entity: !input room_state
+
   lux_sensor_entity: !input lux_sensor
   lux_limit_value: !input lux_limit
+
+  timed_brightness_enabled_value: !input timed_brightness_enabled
+  timed_brightness_start_value: !input timed_brightness_start
+  timed_brightness_end_value: !input timed_brightness_end
+
+  #########################################################
+  # TIME WINDOW DETECTION
+  #########################################################
+
+  is_timed_brightness: >
+    {% set start = timed_brightness_start_value %}
+    {% set end = timed_brightness_end_value %}
+    {% set now_time = now().strftime('%H:%M:%S') %}
+
+    {% if not timed_brightness_enabled_value %}
+      false
+    {% elif start < end %}
+      {{ start <= now_time < end }}
+    {% else %}
+      {{ now_time >= start or now_time < end }}
+    {% endif %}
+
+  #########################################################
+  # EFFECTIVE BRIGHTNESS VALUES
+  #########################################################
+
+  auto_on_brightness_value: >
+    {% if is_timed_brightness %}
+      {{ !input timed_auto_on_brightness }}
+    {% else %}
+      {{ !input auto_on_brightness }}
+    {% endif %}
+
+  auto_dimmed_brightness_value: >
+    {% if is_timed_brightness %}
+      {{ !input timed_auto_dimmed_brightness }}
+    {% else %}
+      {{ !input auto_dimmed_brightness }}
+    {% endif %}
 
 trigger:
 
@@ -511,7 +604,7 @@ action:
           - service: light.turn_on
             target: !input light_target
             data:
-              brightness_pct: 100
+              brightness_pct: "{{ auto_on_brightness_value | int }}"
               transition: !input transition_time
 
       # manual_on
@@ -543,5 +636,5 @@ action:
           - service: light.turn_on
             target: !input light_target
             data:
-              brightness_pct: !input auto_dimmed_brightness
+              brightness_pct: "{{ auto_dimmed_brightness_value | int }}"
               transition: !input transition_time
