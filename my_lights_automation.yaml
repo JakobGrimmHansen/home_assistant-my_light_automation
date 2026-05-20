@@ -1,5 +1,5 @@
 blueprint:
-  name: Room Light State Machine v5
+  name: Room Light State Machine v6
   description: >-
     Advanced room lighting state machine with:
       - Automatic motion lighting
@@ -7,11 +7,28 @@ blueprint:
       - Automatic dimming
       - Lux-aware activation
       - Smooth light transitions
-      - Automatic/manual mode switching
+      - Event-driven architecture
+      - Hardware-independent button handling
 
   domain: automation
 
   input:
+
+    room_name:
+      name: Room Name
+      description: >-
+        Logical room identifier used for custom events.
+
+        Example:
+          living_room
+          bedroom
+          office
+
+        Must match the room value emitted by your
+        button automations.
+
+      selector:
+        text:
 
     room_state:
       name: Room State Helper
@@ -82,24 +99,6 @@ blueprint:
           filter:
             - domain: binary_sensor
             - domain: group
-
-    toggle_device:
-      name: Toggle Device
-      description: >-
-        Manual wall switch, dimmer, or button device.
-
-        Expected MQTT actions:
-          - toggle_s2
-          - brightness_move_up_s2
-          - brightness_move_down_s2
-
-        Example devices:
-          - Ubisys D1
-          - Zigbee wall remotes
-          - MQTT dimmers
-
-      selector:
-        device: {}
 
     no_motion_wait:
       name: Time Before Auto Dimmed
@@ -210,21 +209,22 @@ blueprint:
 mode: restart
 
 variables:
+  room_name_value: !input room_name
   room_state_entity: !input room_state
   lux_sensor_entity: !input lux_sensor
   lux_limit_value: !input lux_limit
-  dimmed_brightness: !input auto_dimmed_brightness
-  transition_time_value: !input transition_time
 
 trigger:
 
-  # Motion detected
+  #########################################################
+  # MOTION
+  #########################################################
+
   - platform: state
     entity_id: !input motion_sensor
     to: "on"
     id: motion_on
 
-  # No motion -> auto_dimmed
   - platform: state
     entity_id: !input motion_sensor
     to: "off"
@@ -232,7 +232,10 @@ trigger:
       seconds: !input no_motion_wait
     id: motion_off
 
-  # auto_dimmed timeout -> auto_off
+  #########################################################
+  # AUTO DIMMED TIMEOUT
+  #########################################################
+
   - platform: state
     entity_id: !input room_state
     to: "auto_dimmed"
@@ -240,34 +243,33 @@ trigger:
       seconds: !input auto_off_wait
     id: auto_dimmed_timeout
 
-  # State helper changed
+  #########################################################
+  # ROOM STATE CHANGED
+  #########################################################
+
   - platform: state
     entity_id: !input room_state
     id: room_state_changed
 
-  # Manual toggle
-  - platform: device
-    device_id: !input toggle_device
-    domain: mqtt
-    type: action
-    subtype: toggle_s2
+  #########################################################
+  # MANUAL TOGGLE EVENT
+  #########################################################
+
+  - platform: event
+    event_type: room_manual_toggle
+    event_data:
+      room: !input room_name
     id: manual_toggle
 
-  # Dimmer gesture up
-  - platform: device
-    device_id: !input toggle_device
-    domain: mqtt
-    type: action
-    subtype: brightness_move_up_s2
-    id: auto_mode_trigger_up
+  #########################################################
+  # RETURN TO AUTO MODE EVENT
+  #########################################################
 
-  # Dimmer gesture down
-  - platform: device
-    device_id: !input toggle_device
-    domain: mqtt
-    type: action
-    subtype: brightness_move_down_s2
-    id: auto_mode_trigger_down
+  - platform: event
+    event_type: room_auto_mode
+    event_data:
+      room: !input room_name
+    id: auto_mode
 
 condition: []
 
@@ -275,16 +277,12 @@ action:
   - choose:
 
       #########################################################
-      # DIMMER GESTURE -> RETURN TO AUTO MODE
+      # RETURN TO AUTO MODE
       #########################################################
 
       - conditions:
-          - condition: or
-            conditions:
-              - condition: trigger
-                id: auto_mode_trigger_up
-              - condition: trigger
-                id: auto_mode_trigger_down
+          - condition: trigger
+            id: auto_mode
 
         sequence:
           - choose:
