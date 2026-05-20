@@ -326,6 +326,12 @@ variables:
   timed_brightness_start_value: !input timed_brightness_start
   timed_brightness_end_value: !input timed_brightness_end
 
+  auto_on_brightness_input: !input auto_on_brightness
+  auto_dimmed_brightness_input: !input auto_dimmed_brightness
+
+  timed_auto_on_brightness_input: !input timed_auto_on_brightness
+  timed_auto_dimmed_brightness_input: !input timed_auto_dimmed_brightness
+
   #########################################################
   # TIME WINDOW DETECTION
   #########################################################
@@ -349,16 +355,16 @@ variables:
 
   auto_on_brightness_value: >
     {% if is_timed_brightness %}
-      {{ !input timed_auto_on_brightness }}
+      {{ timed_auto_on_brightness_input }}
     {% else %}
-      {{ !input auto_on_brightness }}
+      {{ auto_on_brightness_input }}
     {% endif %}
 
   auto_dimmed_brightness_value: >
     {% if is_timed_brightness %}
-      {{ !input timed_auto_dimmed_brightness }}
+      {{ timed_auto_dimmed_brightness_input }}
     {% else %}
-      {{ !input auto_dimmed_brightness }}
+      {{ auto_dimmed_brightness_input }}
     {% endif %}
 
 trigger:
