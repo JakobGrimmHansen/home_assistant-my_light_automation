@@ -1,5 +1,5 @@
 blueprint:
-  name: Room Light State Machine v7
+  name: Room Light State Machine v8
   description: >-
     Advanced room lighting state machine with:
       - Automatic motion lighting
@@ -10,10 +10,15 @@ blueprint:
       - Event-driven architecture
       - Hardware-independent button handling
       - Time-based brightness profiles
+      - Per-state transition timings
 
   domain: automation
 
   input:
+
+    #########################################################
+    # ROOM
+    #########################################################
 
     room_name:
       name: Room Name
@@ -61,6 +66,10 @@ blueprint:
         entity:
           domain: input_select
 
+    #########################################################
+    # DEVICES
+    #########################################################
+
     light_target:
       name: Light Target
       description: >-
@@ -96,6 +105,10 @@ blueprint:
             - domain: binary_sensor
             - domain: group
 
+    #########################################################
+    # TIMERS
+    #########################################################
+
     no_motion_wait:
       name: Time Before Auto Dimmed
       description: >-
@@ -125,6 +138,10 @@ blueprint:
           max: 3600
           unit_of_measurement: seconds
           mode: box
+
+    #########################################################
+    # LUX
+    #########################################################
 
     lux_sensor:
       name: Lux Sensor
@@ -159,7 +176,7 @@ blueprint:
     auto_on_brightness:
       name: Auto On Brightness %
       description: >-
-        Default brightness level used during auto_on state.
+        Brightness level used during auto_on state.
 
       default: 100
 
@@ -183,7 +200,7 @@ blueprint:
           unit_of_measurement: "%"
 
     #########################################################
-    # TIME-BASED BRIGHTNESS
+    # TIMED BRIGHTNESS MODE
     #########################################################
 
     timed_brightness_enabled:
@@ -241,15 +258,52 @@ blueprint:
           unit_of_measurement: "%"
 
     #########################################################
-    # TRANSITION
+    # TRANSITIONS
     #########################################################
 
-    transition_time:
-      name: Light Transition Time
-      description: >-
-        Fade duration used for all brightness and on/off transitions.
+    transition_auto_on:
+      name: Transition Auto Off -> Auto On
 
       default: 1
+
+      selector:
+        number:
+          min: 0
+          max: 30
+          step: 0.1
+          unit_of_measurement: seconds
+          mode: box
+
+    transition_auto_dimmed:
+      name: Transition Auto On -> Auto Dimmed
+
+      default: 5
+
+      selector:
+        number:
+          min: 0
+          max: 30
+          step: 0.1
+          unit_of_measurement: seconds
+          mode: box
+
+    transition_auto_off:
+      name: Transition Auto Dimmed -> Auto Off
+
+      default: 3
+
+      selector:
+        number:
+          min: 0
+          max: 30
+          step: 0.1
+          unit_of_measurement: seconds
+          mode: box
+
+    transition_manual:
+      name: Manual On/Off Transition
+
+      default: 0.5
 
       selector:
         number:
@@ -290,7 +344,7 @@ variables:
     {% endif %}
 
   #########################################################
-  # EFFECTIVE BRIGHTNESS VALUES
+  # EFFECTIVE BRIGHTNESS
   #########################################################
 
   auto_on_brightness_value: >
@@ -355,7 +409,7 @@ trigger:
     id: manual_toggle
 
   #########################################################
-  # RETURN TO AUTO MODE EVENT
+  # AUTO MODE EVENT
   #########################################################
 
   - platform: event
@@ -574,7 +628,7 @@ action:
           - service: light.turn_off
             target: !input light_target
             data:
-              transition: !input transition_time
+              transition: !input transition_auto_off
 
       # manual_off
       - conditions:
@@ -589,7 +643,7 @@ action:
           - service: light.turn_off
             target: !input light_target
             data:
-              transition: !input transition_time
+              transition: !input transition_manual
 
       # auto_on
       - conditions:
@@ -605,7 +659,7 @@ action:
             target: !input light_target
             data:
               brightness_pct: "{{ auto_on_brightness_value | int }}"
-              transition: !input transition_time
+              transition: !input transition_auto_on
 
       # manual_on
       - conditions:
@@ -621,7 +675,7 @@ action:
             target: !input light_target
             data:
               brightness_pct: 100
-              transition: !input transition_time
+              transition: !input transition_manual
 
       # auto_dimmed
       - conditions:
@@ -637,4 +691,4 @@ action:
             target: !input light_target
             data:
               brightness_pct: "{{ auto_dimmed_brightness_value | int }}"
-              transition: !input transition_time
+              transition: !input transition_auto_dimmed
