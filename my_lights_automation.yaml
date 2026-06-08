@@ -485,10 +485,10 @@ action:
             default:
               # Not occupied -> auto_off
               - action: input_select.select_option
-                    target:
-                      entity_id: !input room_state
-                    data:
-                      option: "auto_off"
+                target:
+                  entity_id: !input room_state
+                data:
+                  option: "auto_off"
 
       #########################################################
       # MANUAL TRANSITIONS
