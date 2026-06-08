@@ -1,15 +1,15 @@
 blueprint:
-  name: Room Light State Machine v8
+  name: Room Light State Machine v9
   description: >-
     Advanced room lighting state machine with:
       - Automatic motion lighting
       - Manual override states
-      - Automatic dimming
+      - Automatic dimming or Scene activation
       - Lux-aware activation
       - Smooth light transitions
       - Event-driven architecture
       - Hardware-independent button handling
-      - Time-based brightness profiles
+      - Time-based brightness or scene profiles
       - Per-state transition timings
 
   domain: automation
@@ -27,7 +27,6 @@ blueprint:
         
         Must match the room value emitted by your
         button automations.
-
       selector:
         text:
 
@@ -61,7 +60,6 @@ blueprint:
           manual_off:
             User manually forced lights off.
             Motion automation will not turn lights on.
-
       selector:
         entity:
           domain: input_select
@@ -79,7 +77,6 @@ blueprint:
           - single lights
           - light groups
           - areas
-
       selector:
         target:
           entity:
@@ -98,12 +95,27 @@ blueprint:
         Sensor must report:
           - on = occupied/motion
           - off = clear/no motion
-
       selector:
         entity:
           filter:
             - domain: binary_sensor
             - domain: group
+
+    #########################################################
+    # CONTROL MODE
+    #########################################################
+
+    control_type:
+      name: Control Type
+      description: Choose whether to control lights using Brightness Percentages or Scenes.
+      default: brightness
+      selector:
+        select:
+          options:
+            - label: Brightness
+              value: brightness
+            - label: Scene
+              value: scene
 
     #########################################################
     # TIMERS
@@ -114,9 +126,7 @@ blueprint:
       description: >-
         Time without occupancy before transitioning:
           auto_on -> auto_dimmed
-
       default: 300
-
       selector:
         number:
           min: 0
@@ -129,9 +139,7 @@ blueprint:
       description: >-
         Time spent in auto_dimmed before transitioning:
           auto_dimmed -> auto_off
-
       default: 120
-
       selector:
         number:
           min: 0
@@ -150,9 +158,7 @@ blueprint:
         automatically turning on when the room is already bright.
 
         Leave empty to disable lux-based activation logic.
-
       default: ""
-
       selector:
         entity:
           domain: sensor
@@ -161,9 +167,7 @@ blueprint:
       name: Lux Limit
       description: >-
         Maximum lux value allowed for automatic activation.
-
       default: 0
-
       selector:
         number:
           min: 0
@@ -175,11 +179,8 @@ blueprint:
 
     auto_on_brightness:
       name: Auto On Brightness %
-      description: >-
-        Brightness level used during auto_on state.
-
+      description: Brightness level used during auto_on state (Brightness mode).
       default: 100
-
       selector:
         number:
           min: 1
@@ -188,11 +189,8 @@ blueprint:
 
     auto_dimmed_brightness:
       name: Auto Dimmed Brightness %
-      description: >-
-        Brightness level used during auto_dimmed state.
-
+      description: Brightness level used during auto_dimmed state (Brightness mode).
       default: 20
-
       selector:
         number:
           min: 1
@@ -200,44 +198,54 @@ blueprint:
           unit_of_measurement: "%"
 
     #########################################################
-    # TIMED BRIGHTNESS MODE
+    # SCENE SETTINGS
+    #########################################################
+
+    auto_on_scene:
+      name: Auto On Scene
+      description: Scene to activate during auto_on state (Scene mode).
+      default: ""
+      selector:
+        entity:
+          domain: scene
+
+    auto_dimmed_scene:
+      name: Auto Dimmed Scene
+      description: Scene to activate during auto_dimmed state (Scene mode).
+      default: ""
+      selector:
+        entity:
+          domain: scene
+
+    #########################################################
+    # TIMED PROFILES MODE
     #########################################################
 
     timed_brightness_enabled:
-      name: Timed Brightness Enabled
-      description: >-
-        Enable alternate brightness levels during a fixed time window.
-
+      name: Timed Profiles Enabled
+      description: Enable alternate brightness levels or scenes during a fixed time window.
       default: false
-
       selector:
         boolean:
 
     timed_brightness_start:
-      name: Timed Brightness Start
-      description: Start time for alternate brightness mode.
-
+      name: Timed Window Start
+      description: Start time for alternate profile mode.
       default: "22:00:00"
-
       selector:
         time:
 
     timed_brightness_end:
-      name: Timed Brightness End
-      description: End time for alternate brightness mode.
-
+      name: Timed Window End
+      description: End time for alternate profile mode.
       default: "06:00:00"
-
       selector:
         time:
 
     timed_auto_on_brightness:
       name: Timed Auto On Brightness %
-      description: >-
-        Auto_on brightness used during timed mode.
-
+      description: Auto_on brightness used during timed mode.
       default: 30
-
       selector:
         number:
           min: 1
@@ -246,16 +254,29 @@ blueprint:
 
     timed_auto_dimmed_brightness:
       name: Timed Auto Dimmed Brightness %
-      description: >-
-        Auto_dimmed brightness used during timed mode.
-
+      description: Auto_dimmed brightness used during timed mode.
       default: 5
-
       selector:
         number:
           min: 1
           max: 100
           unit_of_measurement: "%"
+
+    timed_auto_on_scene:
+      name: Timed Auto On Scene
+      description: Auto_on scene used during timed mode.
+      default: ""
+      selector:
+        entity:
+          domain: scene
+
+    timed_auto_dimmed_scene:
+      name: Timed Auto Dimmed Scene
+      description: Auto_dimmed scene used during timed mode.
+      default: ""
+      selector:
+        entity:
+          domain: scene
 
     #########################################################
     # TRANSITIONS
@@ -263,9 +284,7 @@ blueprint:
 
     transition_auto_on:
       name: Transition Auto Off -> Auto On
-
       default: 1
-
       selector:
         number:
           min: 0
@@ -276,9 +295,7 @@ blueprint:
 
     transition_auto_dimmed:
       name: Transition Auto On -> Auto Dimmed
-
       default: 5
-
       selector:
         number:
           min: 0
@@ -289,9 +306,7 @@ blueprint:
 
     transition_auto_off:
       name: Transition Auto Dimmed -> Auto Off
-
       default: 3
-
       selector:
         number:
           min: 0
@@ -302,9 +317,7 @@ blueprint:
 
     transition_manual:
       name: Manual On/Off Transition
-
       default: 0.5
-
       selector:
         number:
           min: 0
@@ -322,6 +335,8 @@ variables:
   lux_sensor_entity: !input lux_sensor
   lux_limit_value: !input lux_limit
 
+  control_type_value: !input control_type
+
   timed_brightness_enabled_value: !input timed_brightness_enabled
   timed_brightness_start_value: !input timed_brightness_start
   timed_brightness_end_value: !input timed_brightness_end
@@ -332,6 +347,11 @@ variables:
   timed_auto_on_brightness_input: !input timed_auto_on_brightness
   timed_auto_dimmed_brightness_input: !input timed_auto_dimmed_brightness
 
+  auto_on_scene_input: !input auto_on_scene
+  auto_dimmed_scene_input: !input auto_dimmed_scene
+  timed_auto_on_scene_input: !input timed_auto_on_scene
+  timed_auto_dimmed_scene_input: !input timed_auto_dimmed_scene
+
   #########################################################
   # TIME WINDOW DETECTION
   #########################################################
@@ -340,7 +360,6 @@ variables:
     {% set start = timed_brightness_start_value %}
     {% set end = timed_brightness_end_value %}
     {% set now_time = now().strftime('%H:%M:%S') %}
-
     {% if not timed_brightness_enabled_value %}
       false
     {% elif start < end %}
@@ -350,21 +369,35 @@ variables:
     {% endif %}
 
   #########################################################
-  # EFFECTIVE BRIGHTNESS
+  # EFFECTIVE LIGHT OUTPUT VALUES
   #########################################################
 
   auto_on_brightness_value: >
-    {% if is_timed_brightness %}
+    {% if is_timed_brightness | trim | bool %}
       {{ timed_auto_on_brightness_input }}
     {% else %}
       {{ auto_on_brightness_input }}
     {% endif %}
 
   auto_dimmed_brightness_value: >
-    {% if is_timed_brightness %}
+    {% if is_timed_brightness | trim | bool %}
       {{ timed_auto_dimmed_brightness_input }}
     {% else %}
       {{ auto_dimmed_brightness_input }}
+    {% endif %}
+
+  effective_auto_on_scene: >
+    {% if is_timed_brightness | trim | bool and timed_auto_on_scene_input != "" %}
+      {{ timed_auto_on_scene_input }}
+    {% else %}
+      {{ auto_on_scene_input }}
+    {% endif %}
+
+  effective_auto_dimmed_scene: >
+    {% if is_timed_brightness | trim | bool and timed_auto_dimmed_scene_input != "" %}
+      {{ timed_auto_dimmed_scene_input }}
+    {% else %}
+      {{ auto_dimmed_scene_input }}
     {% endif %}
 
 trigger:
@@ -436,30 +469,26 @@ action:
       - conditions:
           - condition: trigger
             id: auto_mode
-
         sequence:
           - choose:
-
               # Occupied -> auto_on
               - conditions:
                   - condition: state
                     entity_id: !input motion_sensor
                     state: "on"
-
                 sequence:
-                  - service: input_select.select_option
+                  - action: input_select.select_option
                     target:
                       entity_id: !input room_state
                     data:
                       option: "auto_on"
-
             default:
               # Not occupied -> auto_off
-              - service: input_select.select_option
-                target:
-                  entity_id: !input room_state
-                data:
-                  option: "auto_off"
+              - action: input_select.select_option
+                    target:
+                      entity_id: !input room_state
+                    data:
+                      option: "auto_off"
 
       #########################################################
       # MANUAL TRANSITIONS
@@ -469,13 +498,10 @@ action:
       - conditions:
           - condition: trigger
             id: manual_toggle
-
           - condition: template
-            value_template: >
-              {{ states(room_state_entity) == 'auto_on' }}
-
+            value_template: "{{ states(room_state_entity) == 'auto_on' }}"
         sequence:
-          - service: input_select.select_option
+          - action: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -485,13 +511,10 @@ action:
       - conditions:
           - condition: trigger
             id: manual_toggle
-
           - condition: template
-            value_template: >
-              {{ states(room_state_entity) == 'auto_off' }}
-
+            value_template: "{{ states(room_state_entity) == 'auto_off' }}"
         sequence:
-          - service: input_select.select_option
+          - action: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -501,13 +524,10 @@ action:
       - conditions:
           - condition: trigger
             id: manual_toggle
-
           - condition: template
-            value_template: >
-              {{ states(room_state_entity) == 'auto_dimmed' }}
-
+            value_template: "{{ states(room_state_entity) == 'auto_dimmed' }}"
         sequence:
-          - service: input_select.select_option
+          - action: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -517,13 +537,10 @@ action:
       - conditions:
           - condition: trigger
             id: manual_toggle
-
           - condition: template
-            value_template: >
-              {{ states(room_state_entity) == 'manual_off' }}
-
+            value_template: "{{ states(room_state_entity) == 'manual_off' }}"
         sequence:
-          - service: input_select.select_option
+          - action: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -533,13 +550,10 @@ action:
       - conditions:
           - condition: trigger
             id: manual_toggle
-
           - condition: template
-            value_template: >
-              {{ states(room_state_entity) == 'manual_on' }}
-
+            value_template: "{{ states(room_state_entity) == 'manual_on' }}"
         sequence:
-          - service: input_select.select_option
+          - action: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -553,21 +567,17 @@ action:
       - conditions:
           - condition: trigger
             id: motion_on
-
           - condition: template
-            value_template: >
-              {{ states(room_state_entity) == 'auto_off' }}
-
+            value_template: "{{ states(room_state_entity) == 'auto_off' }}"
           - condition: template
             value_template: >
               {{
                 lux_limit_value | int(0) == 0
-                or lux_sensor_entity == ''
+                or lux_sensor_entity in ['', 'none', none]
                 or states(lux_sensor_entity) | float(0) < lux_limit_value | float(0)
               }}
-
         sequence:
-          - service: input_select.select_option
+          - action: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -577,13 +587,10 @@ action:
       - conditions:
           - condition: trigger
             id: motion_on
-
           - condition: template
-            value_template: >
-              {{ states(room_state_entity) == 'auto_dimmed' }}
-
+            value_template: "{{ states(room_state_entity) == 'auto_dimmed' }}"
         sequence:
-          - service: input_select.select_option
+          - action: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -593,13 +600,10 @@ action:
       - conditions:
           - condition: trigger
             id: motion_off
-
           - condition: template
-            value_template: >
-              {{ states(room_state_entity) == 'auto_on' }}
-
+            value_template: "{{ states(room_state_entity) == 'auto_on' }}"
         sequence:
-          - service: input_select.select_option
+          - action: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -609,9 +613,8 @@ action:
       - conditions:
           - condition: trigger
             id: auto_dimmed_timeout
-
         sequence:
-          - service: input_select.select_option
+          - action: input_select.select_option
             target:
               entity_id: !input room_state
             data:
@@ -625,13 +628,10 @@ action:
       - conditions:
           - condition: trigger
             id: room_state_changed
-
           - condition: template
-            value_template: >
-              {{ trigger.to_state.state == 'auto_off' }}
-
+            value_template: "{{ trigger.to_state.state == 'auto_off' }}"
         sequence:
-          - service: light.turn_off
+          - action: light.turn_off
             target: !input light_target
             data:
               transition: !input transition_auto_off
@@ -640,13 +640,10 @@ action:
       - conditions:
           - condition: trigger
             id: room_state_changed
-
           - condition: template
-            value_template: >
-              {{ trigger.to_state.state == 'manual_off' }}
-
+            value_template: "{{ trigger.to_state.state == 'manual_off' }}"
         sequence:
-          - service: light.turn_off
+          - action: light.turn_off
             target: !input light_target
             data:
               transition: !input transition_manual
@@ -655,46 +652,70 @@ action:
       - conditions:
           - condition: trigger
             id: room_state_changed
-
           - condition: template
-            value_template: >
-              {{ trigger.to_state.state == 'auto_on' }}
-
+            value_template: "{{ trigger.to_state.state == 'auto_on' }}"
         sequence:
-          - service: light.turn_on
-            target: !input light_target
-            data:
-              brightness_pct: "{{ auto_on_brightness_value | int }}"
-              transition: !input transition_auto_on
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ control_type_value == 'scene' and effective_auto_on_scene != '' }}"
+                sequence:
+                  - action: scene.turn_on
+                    target:
+                      entity_id: "{{ effective_auto_on_scene }}"
+                    data:
+                      transition: !input transition_auto_on
+            default:
+              - action: light.turn_on
+                target: !input light_target
+                data:
+                  brightness_pct: "{{ auto_on_brightness_value | int }}"
+                  transition: !input transition_auto_on
 
       # manual_on
       - conditions:
           - condition: trigger
             id: room_state_changed
-
           - condition: template
-            value_template: >
-              {{ trigger.to_state.state == 'manual_on' }}
-
+            value_template: "{{ trigger.to_state.state == 'manual_on' }}"
         sequence:
-          - service: light.turn_on
-            target: !input light_target
-            data:
-              brightness_pct: 100
-              transition: !input transition_manual
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ control_type_value == 'scene' and effective_auto_on_scene != '' }}"
+                sequence:
+                  - action: scene.turn_on
+                    target:
+                      entity_id: "{{ effective_auto_on_scene }}"
+                    data:
+                      transition: !input transition_manual
+            default:
+              - action: light.turn_on
+                target: !input light_target
+                data:
+                  brightness_pct: 100
+                  transition: !input transition_manual
 
       # auto_dimmed
       - conditions:
           - condition: trigger
             id: room_state_changed
-
           - condition: template
-            value_template: >
-              {{ trigger.to_state.state == 'auto_dimmed' }}
-
+            value_template: "{{ trigger.to_state.state == 'auto_dimmed' }}"
         sequence:
-          - service: light.turn_on
-            target: !input light_target
-            data:
-              brightness_pct: "{{ auto_dimmed_brightness_value | int }}"
-              transition: !input transition_auto_dimmed
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ control_type_value == 'scene' and effective_auto_dimmed_scene != '' }}"
+                sequence:
+                  - action: scene.turn_on
+                    target:
+                      entity_id: "{{ effective_auto_dimmed_scene }}"
+                    data:
+                      transition: !input transition_auto_dimmed
+            default:
+              - action: light.turn_on
+                target: !input light_target
+                data:
+                  brightness_pct: "{{ auto_dimmed_brightness_value | int }}"
+                  transition: !input transition_auto_dimmed
