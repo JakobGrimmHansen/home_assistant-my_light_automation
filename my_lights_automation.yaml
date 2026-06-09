@@ -1,5 +1,5 @@
 blueprint:
-  name: Room Light State Machine v12 (Hybrid Mode)
+  name: Room Light State Machine v14 (Common Off Scene)
   description: >-
     Advanced room lighting state machine with:
       - Automatic motion lighting
@@ -11,6 +11,7 @@ blueprint:
       - Hardware-independent button handling
       - Schedule-based brightness or scene profiles
       - Per-state transition timings
+      - A common Off Scene for uniform shutdowns
 
   domain: automation
 
@@ -69,9 +70,10 @@ blueprint:
     #########################################################
 
     light_target:
-      name: Light Target
+      name: Light Target (Fallback)
       description: >-
         Light or group of lights controlled by this room state machine.
+        Used as a fallback if no Off Scene is defined.
 
         Supports:
           - single lights
@@ -253,6 +255,14 @@ blueprint:
         entity:
           domain: scene
 
+    off_scene:
+      name: Off Scene (Optional)
+      description: Common scene activated to turn everything off. Leave blank to use standard light turn off.
+      default: ""
+      selector:
+        entity:
+          domain: scene
+
     #########################################################
     # TIMED PROFILES CONFIGURATION (via Schedule Helper)
     #########################################################
@@ -345,6 +355,7 @@ variables:
   daylight_dim: !input daylight_dim_scene
   nightlight_bright: !input nightlight_bright_scene
   nightlight_dim: !input nightlight_dim_scene
+  off_scene_value: !input off_scene
 
   #########################################################
   # SCHEDULE STATE DETECTION
@@ -620,10 +631,21 @@ action:
           - condition: template
             value_template: "{{ trigger.to_state.state == 'auto_off' }}"
         sequence:
-          - action: light.turn_off
-            target: !input light_target
-            data:
-              transition: !input transition_auto_off
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ control_type_value == 'scene' and off_scene_value != '' }}"
+                sequence:
+                  - action: scene.turn_on
+                    target:
+                      entity_id: "{{ off_scene_value }}"
+                    data:
+                      transition: !input transition_auto_off
+            default:
+              - action: light.turn_off
+                target: !input light_target
+                data:
+                  transition: !input transition_auto_off
 
       # manual_off
       - conditions:
@@ -632,10 +654,21 @@ action:
           - condition: template
             value_template: "{{ trigger.to_state.state == 'manual_off' }}"
         sequence:
-          - action: light.turn_off
-            target: !input light_target
-            data:
-              transition: !input transition_manual
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ control_type_value == 'scene' and off_scene_value != '' }}"
+                sequence:
+                  - action: scene.turn_on
+                    target:
+                      entity_id: "{{ off_scene_value }}"
+                    data:
+                      transition: !input transition_manual
+            default:
+              - action: light.turn_off
+                target: !input light_target
+                data:
+                  transition: !input transition_manual
 
       # auto_on
       - conditions:
