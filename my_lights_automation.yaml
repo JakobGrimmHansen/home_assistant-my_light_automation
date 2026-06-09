@@ -1,5 +1,5 @@
 blueprint:
-  name: Room Light State Machine v10
+  name: Room Light State Machine v12 (Hybrid Mode)
   description: >-
     Advanced room lighting state machine with:
       - Automatic motion lighting
@@ -174,12 +174,12 @@ blueprint:
           max: 10000
 
     #########################################################
-    # BRIGHTNESS SETTINGS
+    # BRIGHTNESS SETTINGS (Used if Control Type is Brightness)
     #########################################################
 
     auto_on_brightness:
       name: Auto On Brightness %
-      description: Brightness level used during auto_on state (Brightness mode).
+      description: Brightness level used during auto_on state (Standard profile).
       default: 100
       selector:
         number:
@@ -189,52 +189,13 @@ blueprint:
 
     auto_dimmed_brightness:
       name: Auto Dimmed Brightness %
-      description: Brightness level used during auto_dimmed state (Brightness mode).
+      description: Brightness level used during auto_dimmed state (Standard profile).
       default: 20
       selector:
         number:
           min: 1
           max: 100
           unit_of_measurement: "%"
-
-    #########################################################
-    # SCENE SETTINGS
-    #########################################################
-
-    auto_on_scene:
-      name: Auto On Scene
-      description: Scene to activate during auto_on state (Scene mode).
-      default: ""
-      selector:
-        entity:
-          domain: scene
-
-    auto_dimmed_scene:
-      name: Auto Dimmed Scene
-      description: Scene to activate during auto_dimmed state (Scene mode).
-      default: ""
-      selector:
-        entity:
-          domain: scene
-
-    #########################################################
-    # TIMED PROFILES MODE (via Schedule Helper)
-    #########################################################
-
-    timed_brightness_enabled:
-      name: Timed Profiles Enabled
-      description: Enable alternate profiles during a scheduled time window.
-      default: false
-      selector:
-        boolean:
-
-    profile_schedule:
-      name: Profile Schedule
-      description: Select the Schedule Helper entity that defines when the alternate profile should run.
-      default: ""
-      selector:
-        entity:
-          domain: schedule
 
     timed_auto_on_brightness:
       name: Timed Auto On Brightness %
@@ -256,21 +217,60 @@ blueprint:
           max: 100
           unit_of_measurement: "%"
 
-    timed_auto_on_scene:
-      name: Timed Auto On Scene
-      description: Auto_on scene used when schedule is active.
+    #########################################################
+    # SCENE SETTINGS (Used if Control Type is Scene)
+    #########################################################
+
+    daylight_bright_scene:
+      name: Daylight Bright Scene
+      description: Scene activated for normal daytime occupancy when schedule is off.
       default: ""
       selector:
         entity:
           domain: scene
 
-    timed_auto_dimmed_scene:
-      name: Timed Auto Dimmed Scene
-      description: Auto_dimmed scene used when schedule is active.
+    daylight_dim_scene:
+      name: Daylight Dim Scene
+      description: Scene activated during daytime pre-off warning period when schedule is off.
       default: ""
       selector:
         entity:
           domain: scene
+
+    nightlight_bright_scene:
+      name: Nightlight Bright Scene
+      description: Scene activated for night-time occupancy when schedule is active.
+      default: ""
+      selector:
+        entity:
+          domain: scene
+
+    nightlight_dim_scene:
+      name: Nightlight Dim Scene
+      description: Scene activated during night-time pre-off warning period when schedule is active.
+      default: ""
+      selector:
+        entity:
+          domain: scene
+
+    #########################################################
+    # TIMED PROFILES CONFIGURATION (via Schedule Helper)
+    #########################################################
+
+    timed_brightness_enabled:
+      name: Timed Profiles Enabled
+      description: Enable alternate profiles (alternate brightness or nightlight scenes) during a scheduled time window.
+      default: false
+      selector:
+        boolean:
+
+    profile_schedule:
+      name: Profile Schedule
+      description: Select the Schedule Helper entity that defines when the alternate profile should run.
+      default: ""
+      selector:
+        entity:
+          domain: schedule
 
     #########################################################
     # TRANSITIONS
@@ -334,22 +334,23 @@ variables:
   timed_brightness_enabled_value: !input timed_brightness_enabled
   schedule_entity: !input profile_schedule
 
+  # Brightness inputs Mapping
   auto_on_brightness_input: !input auto_on_brightness
   auto_dimmed_brightness_input: !input auto_dimmed_brightness
-
   timed_auto_on_brightness_input: !input timed_auto_on_brightness
   timed_auto_dimmed_brightness_input: !input timed_auto_dimmed_brightness
 
-  auto_on_scene_input: !input auto_on_scene
-  auto_dimmed_scene_input: !input auto_dimmed_scene
-  timed_auto_on_scene_input: !input timed_auto_on_scene
-  timed_auto_dimmed_scene_input: !input timed_auto_dimmed_scene
+  # Scene inputs Mapping
+  daylight_bright: !input daylight_bright_scene
+  daylight_dim: !input daylight_dim_scene
+  nightlight_bright: !input nightlight_bright_scene
+  nightlight_dim: !input nightlight_dim_scene
 
   #########################################################
   # SCHEDULE STATE DETECTION
   #########################################################
 
-  is_timed_brightness: >
+  is_timed_profile: >
     {% if not timed_brightness_enabled_value or schedule_entity in ['', 'none', none] %}
       false
     {% else %}
@@ -361,31 +362,31 @@ variables:
   #########################################################
 
   auto_on_brightness_value: >
-    {% if is_timed_brightness | trim | bool %}
+    {% if is_timed_profile | trim | bool %}
       {{ timed_auto_on_brightness_input }}
     {% else %}
       {{ auto_on_brightness_input }}
     {% endif %}
 
   auto_dimmed_brightness_value: >
-    {% if is_timed_brightness | trim | bool %}
+    {% if is_timed_profile | trim | bool %}
       {{ timed_auto_dimmed_brightness_input }}
     {% else %}
       {{ auto_dimmed_brightness_input }}
     {% endif %}
 
-  effective_auto_on_scene: >
-    {% if is_timed_brightness | trim | bool and timed_auto_on_scene_input != "" %}
-      {{ timed_auto_on_scene_input }}
+  effective_bright_scene: >
+    {% if is_timed_profile | trim | bool %}
+      {{ nightlight_bright }}
     {% else %}
-      {{ auto_on_scene_input }}
+      {{ daylight_bright }}
     {% endif %}
 
-  effective_auto_dimmed_scene: >
-    {% if is_timed_brightness | trim | bool and timed_auto_dimmed_scene_input != "" %}
-      {{ timed_auto_dimmed_scene_input }}
+  effective_dim_scene: >
+    {% if is_timed_profile | trim | bool %}
+      {{ nightlight_dim }}
     {% else %}
-      {{ auto_dimmed_scene_input }}
+      {{ daylight_dim }}
     {% endif %}
 
 trigger:
@@ -646,11 +647,11 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ control_type_value == 'scene' and effective_auto_on_scene != '' }}"
+                    value_template: "{{ control_type_value == 'scene' and effective_bright_scene != '' }}"
                 sequence:
                   - action: scene.turn_on
                     target:
-                      entity_id: "{{ effective_auto_on_scene }}"
+                      entity_id: "{{ effective_bright_scene }}"
                     data:
                       transition: !input transition_auto_on
             default:
@@ -670,11 +671,11 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ control_type_value == 'scene' and effective_auto_on_scene != '' }}"
+                    value_template: "{{ control_type_value == 'scene' and effective_bright_scene != '' }}"
                 sequence:
                   - action: scene.turn_on
                     target:
-                      entity_id: "{{ effective_auto_on_scene }}"
+                      entity_id: "{{ effective_bright_scene }}"
                     data:
                       transition: !input transition_manual
             default:
@@ -694,11 +695,11 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ control_type_value == 'scene' and effective_auto_dimmed_scene != '' }}"
+                    value_template: "{{ control_type_value == 'scene' and effective_dim_scene != '' }}"
                 sequence:
                   - action: scene.turn_on
                     target:
-                      entity_id: "{{ effective_auto_dimmed_scene }}"
+                      entity_id: "{{ effective_dim_scene }}"
                     data:
                       transition: !input transition_auto_dimmed
             default:
