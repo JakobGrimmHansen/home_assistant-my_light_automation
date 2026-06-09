@@ -1,5 +1,5 @@
 blueprint:
-  name: Room Light State Machine v9
+  name: Room Light State Machine v10
   description: >-
     Advanced room lighting state machine with:
       - Automatic motion lighting
@@ -9,7 +9,7 @@ blueprint:
       - Smooth light transitions
       - Event-driven architecture
       - Hardware-independent button handling
-      - Time-based brightness or scene profiles
+      - Schedule-based brightness or scene profiles
       - Per-state transition timings
 
   domain: automation
@@ -218,33 +218,27 @@ blueprint:
           domain: scene
 
     #########################################################
-    # TIMED PROFILES MODE
+    # TIMED PROFILES MODE (via Schedule Helper)
     #########################################################
 
     timed_brightness_enabled:
       name: Timed Profiles Enabled
-      description: Enable alternate brightness levels or scenes during a fixed time window.
+      description: Enable alternate profiles during a scheduled time window.
       default: false
       selector:
         boolean:
 
-    timed_brightness_start:
-      name: Timed Window Start
-      description: Start time for alternate profile mode.
-      default: "22:00:00"
+    profile_schedule:
+      name: Profile Schedule
+      description: Select the Schedule Helper entity that defines when the alternate profile should run.
+      default: ""
       selector:
-        time:
-
-    timed_brightness_end:
-      name: Timed Window End
-      description: End time for alternate profile mode.
-      default: "06:00:00"
-      selector:
-        time:
+        entity:
+          domain: schedule
 
     timed_auto_on_brightness:
       name: Timed Auto On Brightness %
-      description: Auto_on brightness used during timed mode.
+      description: Auto_on brightness used when schedule is active.
       default: 30
       selector:
         number:
@@ -254,7 +248,7 @@ blueprint:
 
     timed_auto_dimmed_brightness:
       name: Timed Auto Dimmed Brightness %
-      description: Auto_dimmed brightness used during timed mode.
+      description: Auto_dimmed brightness used when schedule is active.
       default: 5
       selector:
         number:
@@ -264,7 +258,7 @@ blueprint:
 
     timed_auto_on_scene:
       name: Timed Auto On Scene
-      description: Auto_on scene used during timed mode.
+      description: Auto_on scene used when schedule is active.
       default: ""
       selector:
         entity:
@@ -272,7 +266,7 @@ blueprint:
 
     timed_auto_dimmed_scene:
       name: Timed Auto Dimmed Scene
-      description: Auto_dimmed scene used during timed mode.
+      description: Auto_dimmed scene used when schedule is active.
       default: ""
       selector:
         entity:
@@ -338,8 +332,7 @@ variables:
   control_type_value: !input control_type
 
   timed_brightness_enabled_value: !input timed_brightness_enabled
-  timed_brightness_start_value: !input timed_brightness_start
-  timed_brightness_end_value: !input timed_brightness_end
+  schedule_entity: !input profile_schedule
 
   auto_on_brightness_input: !input auto_on_brightness
   auto_dimmed_brightness_input: !input auto_dimmed_brightness
@@ -353,19 +346,14 @@ variables:
   timed_auto_dimmed_scene_input: !input timed_auto_dimmed_scene
 
   #########################################################
-  # TIME WINDOW DETECTION
+  # SCHEDULE STATE DETECTION
   #########################################################
 
   is_timed_brightness: >
-    {% set start = timed_brightness_start_value %}
-    {% set end = timed_brightness_end_value %}
-    {% set now_time = now().strftime('%H:%M:%S') %}
-    {% if not timed_brightness_enabled_value %}
+    {% if not timed_brightness_enabled_value or schedule_entity in ['', 'none', none] %}
       false
-    {% elif start < end %}
-      {{ start <= now_time < end }}
     {% else %}
-      {{ now_time >= start or now_time < end }}
+      {{ states(schedule_entity) == 'on' }}
     {% endif %}
 
   #########################################################
@@ -573,7 +561,7 @@ action:
             value_template: >
               {{
                 lux_limit_value | int(0) == 0
-                or lux_sensor_entity in ['', 'none', none]
+                or schedule_entity in ['', 'none', none]
                 or states(lux_sensor_entity) | float(0) < lux_limit_value | float(0)
               }}
         sequence:
