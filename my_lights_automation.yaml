@@ -12,7 +12,7 @@ blueprint:
       - Schedule-based brightness or scene profiles
       - Per-state transition timings
       - A common Off Scene for uniform shutdowns
-      - Configurable manual override safety timeout
+      - Configurable manual override safety timeout (Set to 0 to disable)
 
   domain: automation
 
@@ -165,12 +165,13 @@ blueprint:
       description: >-
         Time spent without any motion before a manual override state
         automatically resets back to automatic mode (auto_off).
-      default: 7200
+        Set to 0 to disable this safety timeout completely.
+      default: 0
       selector:
         number:
           min: 0
-          max: 86400
-          unit_of_measurement: seconds
+          max: 1440
+          unit_of_measurement: minutes
           mode: box
 
     #########################################################
@@ -427,6 +428,9 @@ variables:
   manual_sc_2: !input manual_scene_stage_2
   manual_sc_3: !input manual_scene_stage_3
 
+  # Safety Timeout Value
+  manual_timeout_val: !input manual_override_timeout
+
   #########################################################
   # SCHEDULE STATE DETECTION
   #########################################################
@@ -536,7 +540,7 @@ trigger:
     entity_id: !input motion_sensor
     to: "off"
     for:
-      seconds: !input manual_override_timeout
+      minutes: !input manual_override_timeout
     id: manual_activity_timeout
 
   # Track if a manual override is initiated while the room is already empty
@@ -548,7 +552,7 @@ trigger:
       - "manual_step3"
       - "manual_step2_descend"
     for:
-      seconds: !input manual_override_timeout
+      minutes: !input manual_override_timeout
     id: manual_activity_timeout
 
 condition: []
@@ -591,6 +595,8 @@ action:
       - conditions:
           - condition: trigger
             id: manual_activity_timeout
+          - condition: template
+            value_template: "{{ manual_timeout_val | int(0) > 0 }}"
           - condition: template
             value_template: "{{ states(room_state_entity) in ['manual_off', 'manual_step2_climb', 'manual_step3', 'manual_step2_descend'] }}"
           - condition: state
