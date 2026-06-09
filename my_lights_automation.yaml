@@ -1,5 +1,5 @@
 blueprint:
-  name: Room Light State Machine v14 (Common Off Scene)
+  name: Room Light State Machine v15
   description: >-
     Advanced room lighting state machine with:
       - Automatic motion lighting
@@ -12,6 +12,7 @@ blueprint:
       - Schedule-based brightness or scene profiles
       - Per-state transition timings
       - A common Off Scene for uniform shutdowns
+      - Configurable manual override safety timeout
 
   domain: automation
 
@@ -156,6 +157,19 @@ blueprint:
         number:
           min: 0
           max: 3600
+          unit_of_measurement: seconds
+          mode: box
+
+    manual_override_timeout:
+      name: Manual Override Timeout (No Activity)
+      description: >-
+        Time spent without any motion before a manual override state
+        automatically resets back to automatic mode (auto_off).
+      default: 7200
+      selector:
+        number:
+          min: 0
+          max: 86400
           unit_of_measurement: seconds
           mode: box
 
@@ -513,6 +527,30 @@ trigger:
       room: !input room_name
     id: auto_mode
 
+  #########################################################
+  # MANUAL OVERRIDE INACTIVITY TIMEOUTS
+  #########################################################
+
+  # Track if motion stays clear while already in a manual override
+  - platform: state
+    entity_id: !input motion_sensor
+    to: "off"
+    for:
+      seconds: !input manual_override_timeout
+    id: manual_activity_timeout
+
+  # Track if a manual override is initiated while the room is already empty
+  - platform: state
+    entity_id: !input room_state
+    to:
+      - "manual_off"
+      - "manual_step2_climb"
+      - "manual_step3"
+      - "manual_step2_descend"
+    for:
+      seconds: !input manual_override_timeout
+    id: manual_activity_timeout
+
 condition: []
 
 action:
@@ -545,6 +583,25 @@ action:
                   entity_id: !input room_state
                 data:
                   option: "auto_off"
+
+      #########################################################
+      # MANUAL OVERRIDE INACTIVITY RESET
+      #########################################################
+
+      - conditions:
+          - condition: trigger
+            id: manual_activity_timeout
+          - condition: template
+            value_template: "{{ states(room_state_entity) in ['manual_off', 'manual_step2_climb', 'manual_step3', 'manual_step2_descend'] }}"
+          - condition: state
+            entity_id: !input motion_sensor
+            state: "off"
+        sequence:
+          - action: input_select.select_option
+            target:
+              entity_id: !input room_state
+            data:
+              option: "auto_off"
 
       #########################################################
       # MANUAL TRANSITIONS (3-STATE SEQUENTIAL CYCLE)
