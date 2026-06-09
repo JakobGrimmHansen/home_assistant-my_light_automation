@@ -40,8 +40,10 @@ blueprint:
           - auto_off
           - auto_on
           - auto_dimmed
-          - manual_on
           - manual_off
+          - manual_step2_climb
+          - manual_step3
+          - manual_step2_descend
 
         State meanings:
 
@@ -54,13 +56,21 @@ blueprint:
           auto_dimmed:
             Transitional automatic dimmed state before turning off.
 
-          manual_on:
-            User manually forced lights on.
-            Motion automation will not turn lights off.
-
           manual_off:
-            User manually forced lights off.
-            Motion automation will not turn lights on.
+            State 1: User manually forced lights off.
+            Motion automation is overridden. Next press goes to manual_step2_climb.
+
+          manual_step2_climb:
+            State 2 (Ascending): Lights set to Stage 2 profile.
+            Motion automation is overridden. Next press goes to manual_step3.
+
+          manual_step3:
+            State 3: Lights set to Stage 3 profile.
+            Motion automation is overridden. Next press goes to manual_step2_descend.
+
+          manual_step2_descend:
+            State 2 (Descending): Lights set to Stage 2 profile.
+            Motion automation is overridden. Next press goes to manual_off.
       selector:
         entity:
           domain: input_select
@@ -264,6 +274,46 @@ blueprint:
           domain: scene
 
     #########################################################
+    # MANUAL MODE SETTINGS (Dedicated Override Inputs)
+    #########################################################
+
+    manual_brightness_stage_2:
+      name: Manual Stage 2 Brightness %
+      description: Brightness level used for manual_step2_climb and manual_step2_descend states when Control Type is Brightness.
+      default: 40
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+
+    manual_brightness_stage_3:
+      name: Manual Stage 3 Brightness %
+      description: Brightness level used for manual_step3 state when Control Type is Brightness.
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+
+    manual_scene_stage_2:
+      name: Manual Stage 2 Scene
+      description: Scene activated for manual_step2_climb and manual_step2_descend states when Control Type is Scene.
+      default: ""
+      selector:
+        entity:
+          domain: scene
+
+    manual_scene_stage_3:
+      name: Manual Stage 3 Scene
+      description: Scene activated for manual_step3 state when Control Type is Scene.
+      default: ""
+      selector:
+        entity:
+          domain: scene
+
+    #########################################################
     # TIMED PROFILES CONFIGURATION (via Schedule Helper)
     #########################################################
 
@@ -356,6 +406,12 @@ variables:
   nightlight_bright: !input nightlight_bright_scene
   nightlight_dim: !input nightlight_dim_scene
   off_scene_value: !input off_scene
+
+  # Manual override Inputs Mapping
+  manual_bright_2: !input manual_brightness_stage_2
+  manual_bright_3: !input manual_brightness_stage_3
+  manual_sc_2: !input manual_scene_stage_2
+  manual_sc_3: !input manual_scene_stage_3
 
   #########################################################
   # SCHEDULE STATE DETECTION
@@ -491,10 +547,10 @@ action:
                   option: "auto_off"
 
       #########################################################
-      # MANUAL TRANSITIONS
+      # MANUAL TRANSITIONS (3-STATE SEQUENTIAL CYCLE)
       #########################################################
 
-      # auto_on -> manual_off
+      # auto_on (Bright) -> manual_step2_descend
       - conditions:
           - condition: trigger
             id: manual_toggle
@@ -505,9 +561,9 @@ action:
             target:
               entity_id: !input room_state
             data:
-              option: "manual_off"
+              option: "manual_step2_descend"
 
-      # auto_off -> manual_on
+      # auto_off (Off) -> manual_step2_climb
       - conditions:
           - condition: trigger
             id: manual_toggle
@@ -518,9 +574,9 @@ action:
             target:
               entity_id: !input room_state
             data:
-              option: "manual_on"
+              option: "manual_step2_climb"
 
-      # auto_dimmed -> manual_off
+      # auto_dimmed (Dim) -> manual_step2_climb (prepared to step up)
       - conditions:
           - condition: trigger
             id: manual_toggle
@@ -531,9 +587,9 @@ action:
             target:
               entity_id: !input room_state
             data:
-              option: "manual_off"
+              option: "manual_step2_climb"
 
-      # manual_off -> manual_on
+      # manual_off (State 1) -> manual_step2_climb (State 2 Ascending)
       - conditions:
           - condition: trigger
             id: manual_toggle
@@ -544,14 +600,40 @@ action:
             target:
               entity_id: !input room_state
             data:
-              option: "manual_on"
+              option: "manual_step2_climb"
 
-      # manual_on -> manual_off
+      # manual_step2_climb (State 2 Ascending) -> manual_step3 (State 3)
       - conditions:
           - condition: trigger
             id: manual_toggle
           - condition: template
-            value_template: "{{ states(room_state_entity) == 'manual_on' }}"
+            value_template: "{{ states(room_state_entity) == 'manual_step2_climb' }}"
+        sequence:
+          - action: input_select.select_option
+            target:
+              entity_id: !input room_state
+            data:
+              option: "manual_step3"
+
+      # manual_step3 (State 3) -> manual_step2_descend (State 2 Descending)
+      - conditions:
+          - condition: trigger
+            id: manual_toggle
+          - condition: template
+            value_template: "{{ states(room_state_entity) == 'manual_step3' }}"
+        sequence:
+          - action: input_select.select_option
+            target:
+              entity_id: !input room_state
+            data:
+              option: "manual_step2_descend"
+
+      # manual_step2_descend (State 2 Descending) -> manual_off (State 1)
+      - conditions:
+          - condition: trigger
+            id: manual_toggle
+          - condition: template
+            value_template: "{{ states(room_state_entity) == 'manual_step2_descend' }}"
         sequence:
           - action: input_select.select_option
             target:
@@ -647,7 +729,7 @@ action:
                 data:
                   transition: !input transition_auto_off
 
-      # manual_off
+      # manual_off (State 1 - Off)
       - conditions:
           - condition: trigger
             id: room_state_changed
@@ -694,28 +776,28 @@ action:
                   brightness_pct: "{{ auto_on_brightness_value | int }}"
                   transition: !input transition_auto_on
 
-      # manual_on
+      # manual_step3 (State 3 - Bright Override)
       - conditions:
           - condition: trigger
             id: room_state_changed
           - condition: template
-            value_template: "{{ trigger.to_state.state == 'manual_on' }}"
+            value_template: "{{ trigger.to_state.state == 'manual_step3' }}"
         sequence:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ control_type_value == 'scene' and effective_bright_scene != '' }}"
+                    value_template: "{{ control_type_value == 'scene' and manual_sc_3 != '' }}"
                 sequence:
                   - action: scene.turn_on
                     target:
-                      entity_id: "{{ effective_bright_scene }}"
+                      entity_id: "{{ manual_sc_3 }}"
                     data:
                       transition: !input transition_manual
             default:
               - action: light.turn_on
                 target: !input light_target
                 data:
-                  brightness_pct: 100
+                  brightness_pct: "{{ manual_bright_3 | int }}"
                   transition: !input transition_manual
 
       # auto_dimmed
@@ -741,3 +823,27 @@ action:
                 data:
                   brightness_pct: "{{ auto_dimmed_brightness_value | int }}"
                   transition: !input transition_auto_dimmed
+
+      # manual_step2_climb & manual_step2_descend (State 2 - Override)
+      - conditions:
+          - condition: trigger
+            id: room_state_changed
+          - condition: template
+            value_template: "{{ trigger.to_state.state in ['manual_step2_climb', 'manual_step2_descend'] }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ control_type_value == 'scene' and manual_sc_2 != '' }}"
+                sequence:
+                  - action: scene.turn_on
+                    target:
+                      entity_id: "{{ manual_sc_2 }}"
+                    data:
+                      transition: !input transition_manual
+            default:
+              - action: light.turn_on
+                target: !input light_target
+                data:
+                  brightness_pct: "{{ manual_bright_2 | int }}"
+                  transition: !input transition_manual
