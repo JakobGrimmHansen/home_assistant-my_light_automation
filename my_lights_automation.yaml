@@ -180,8 +180,8 @@ blueprint:
     #########################################################
 
     auto_on_brightness:
-      name: Auto On Brightness %
-      description: Brightness level used during auto_on state (Standard profile).
+      name: Daylight Auto On Brightness %
+      description: Brightness level used during auto_on state when the daylight schedule is ON.
       default: 100
       selector:
         number:
@@ -190,8 +190,8 @@ blueprint:
           unit_of_measurement: "%"
 
     auto_dimmed_brightness:
-      name: Auto Dimmed Brightness %
-      description: Brightness level used during auto_dimmed state (Standard profile).
+      name: Daylight Auto Dimmed Brightness %
+      description: Brightness level used during auto_dimmed state when the daylight schedule is ON.
       default: 20
       selector:
         number:
@@ -200,8 +200,8 @@ blueprint:
           unit_of_measurement: "%"
 
     timed_auto_on_brightness:
-      name: Timed Auto On Brightness %
-      description: Auto_on brightness used when schedule is active.
+      name: Nightlight Auto On Brightness %
+      description: Brightness level used during auto_on state when the daylight schedule is OFF.
       default: 30
       selector:
         number:
@@ -210,8 +210,8 @@ blueprint:
           unit_of_measurement: "%"
 
     timed_auto_dimmed_brightness:
-      name: Timed Auto Dimmed Brightness %
-      description: Auto_dimmed brightness used when schedule is active.
+      name: Nightlight Auto Dimmed Brightness %
+      description: Brightness level used during auto_dimmed state when the daylight schedule is OFF.
       default: 5
       selector:
         number:
@@ -225,7 +225,7 @@ blueprint:
 
     daylight_bright_scene:
       name: Daylight Bright Scene
-      description: Scene activated for normal daytime occupancy when schedule is off.
+      description: Scene activated for normal daytime occupancy when the daylight schedule is ON.
       default: ""
       selector:
         entity:
@@ -233,7 +233,7 @@ blueprint:
 
     daylight_dim_scene:
       name: Daylight Dim Scene
-      description: Scene activated during daytime pre-off warning period when schedule is off.
+      description: Scene activated during daytime pre-off warning period when the daylight schedule is ON.
       default: ""
       selector:
         entity:
@@ -241,7 +241,7 @@ blueprint:
 
     nightlight_bright_scene:
       name: Nightlight Bright Scene
-      description: Scene activated for night-time occupancy when schedule is active.
+      description: Scene activated for night-time occupancy when the daylight schedule is OFF.
       default: ""
       selector:
         entity:
@@ -249,7 +249,7 @@ blueprint:
 
     nightlight_dim_scene:
       name: Nightlight Dim Scene
-      description: Scene activated during night-time pre-off warning period when schedule is active.
+      description: Scene activated during night-time pre-off warning period when the daylight schedule is OFF.
       default: ""
       selector:
         entity:
@@ -268,15 +268,15 @@ blueprint:
     #########################################################
 
     timed_brightness_enabled:
-      name: Timed Profiles Enabled
-      description: Enable alternate profiles (alternate brightness or nightlight scenes) during a scheduled time window.
+      name: Enable Daylight/Nightlight Schedule
+      description: Enable alternating between Daylight and Nightlight profiles based on a schedule helper.
       default: false
       selector:
         boolean:
 
     profile_schedule:
-      name: Profile Schedule
-      description: Select the Schedule Helper entity that defines when the alternate profile should run.
+      name: Daylight Schedule
+      description: Select the Schedule Helper entity that defines when it is Daytime (Schedule ON = Daylight, Schedule OFF = Nightlight).
       default: ""
       selector:
         entity:
@@ -361,9 +361,9 @@ variables:
   # SCHEDULE STATE DETECTION
   #########################################################
 
-  is_timed_profile: >
+  is_daylight: >
     {% if not timed_brightness_enabled_value or schedule_entity in ['', 'none', none] %}
-      false
+      true
     {% else %}
       {{ states(schedule_entity) == 'on' }}
     {% endif %}
@@ -373,31 +373,31 @@ variables:
   #########################################################
 
   auto_on_brightness_value: >
-    {% if is_timed_profile | trim | bool %}
-      {{ timed_auto_on_brightness_input }}
-    {% else %}
+    {% if is_daylight | trim | bool %}
       {{ auto_on_brightness_input }}
+    {% else %}
+      {{ timed_auto_on_brightness_input }}
     {% endif %}
 
   auto_dimmed_brightness_value: >
-    {% if is_timed_profile | trim | bool %}
-      {{ timed_auto_dimmed_brightness_input }}
-    {% else %}
+    {% if is_daylight | trim | bool %}
       {{ auto_dimmed_brightness_input }}
+    {% else %}
+      {{ timed_auto_dimmed_brightness_input }}
     {% endif %}
 
   effective_bright_scene: >
-    {% if is_timed_profile | trim | bool %}
-      {{ nightlight_bright }}
-    {% else %}
+    {% if is_daylight | trim | bool %}
       {{ daylight_bright }}
+    {% else %}
+      {{ nightlight_bright }}
     {% endif %}
 
   effective_dim_scene: >
-    {% if is_timed_profile | trim | bool %}
-      {{ nightlight_dim }}
-    {% else %}
+    {% if is_daylight | trim | bool %}
       {{ daylight_dim }}
+    {% else %}
+      {{ nightlight_dim }}
     {% endif %}
 
 trigger:
@@ -573,7 +573,7 @@ action:
             value_template: >
               {{
                 lux_limit_value | int(0) == 0
-                or schedule_entity in ['', 'none', none]
+                or lux_sensor_entity in ['', 'none', none]
                 or states(lux_sensor_entity) | float(0) < lux_limit_value | float(0)
               }}
         sequence:
