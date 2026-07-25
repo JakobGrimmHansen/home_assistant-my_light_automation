@@ -1,0 +1,147 @@
+blueprint:
+  name: "Curtain Control via Remote (Toggle & Scenes)"
+  description: >
+    Control curtain states and trigger corresponding scenes using single and long press events from a switch/remote. 
+    Updates a helper entity to track current curtain state.
+  domain: automation
+  input:
+    remote_device:
+      name: Remote Control
+      description: The MQTT switch/remote used to trigger actions.
+      selector:
+        device:
+          integration: mqtt
+    curtain_state_helper:
+      name: Curtain State Helper
+      description: Input Select entity tracking the current state (Open, Closed, Privacy, SemiPrivacy).
+      selector:
+        entity:
+          domain: input_select
+    scene_close:
+      name: Close Scene
+      description: Scene triggered to fully close curtains.
+      selector:
+        target:
+          entity:
+            domain: scene
+    scene_open:
+      name: Open Scene
+      description: Scene triggered to fully open curtains.
+      selector:
+        target:
+          entity:
+            domain: scene
+    scene_privacy:
+      name: Privacy Scene
+      description: Scene triggered for privacy positioning.
+      selector:
+        target:
+          entity:
+            domain: scene
+    scene_semi_privacy:
+      name: Semi-Privacy Scene
+      description: Scene triggered for semi-privacy positioning.
+      selector:
+        target:
+          entity:
+            domain: scene
+
+mode: single
+
+trigger:
+  - domain: mqtt
+    device_id: !input remote_device
+    type: action
+    subtype: toggle_s2
+    trigger: device
+    id: single_press
+  - domain: mqtt
+    device_id: !input remote_device
+    type: action
+    subtype: brightness_move_up_s2
+    trigger: device
+    id: long_press
+  - domain: mqtt
+    device_id: !input remote_device
+    type: action
+    subtype: brightness_move_down_s2
+    trigger: device
+    id: long_press
+
+action:
+  - choose:
+      # Action 1: Toggle to Closed
+      - conditions:
+          - condition: trigger
+            id: single_press
+          - condition: not
+            conditions:
+              - condition: state
+                entity_id: !input curtain_state_helper
+                state: "Closed"
+        sequence:
+          - action: input_select.set_options
+            target:
+              entity_id: !input curtain_state_helper
+            data:
+              options:
+                - "Closed"
+          - action: scene.turn_on
+            target: !input scene_close
+
+      # Action 2: Toggle to Open
+      - conditions:
+          - condition: trigger
+            id: single_press
+          - condition: not
+            conditions:
+              - condition: state
+                entity_id: !input curtain_state_helper
+                state: "Open"
+        sequence:
+          - action: input_select.set_options
+            target:
+              entity_id: !input curtain_state_helper
+            data:
+              options:
+                - "Open"
+          - action: scene.turn_on
+            target: !input scene_open
+
+      # Action 3: Set to Privacy
+      - conditions:
+          - condition: trigger
+            id: long_press
+          - condition: not
+            conditions:
+              - condition: state
+                entity_id: !input curtain_state_helper
+                state: "Privacy"
+        sequence:
+          - action: input_select.set_options
+            target:
+              entity_id: !input curtain_state_helper
+            data:
+              options:
+                - "Privacy"
+          - action: scene.turn_on
+            target: !input scene_privacy
+
+      # Action 4: Set to SemiPrivacy
+      - conditions:
+          - condition: trigger
+            id: long_press
+          - condition: not
+            conditions:
+              - condition: state
+                entity_id: !input curtain_state_helper
+                state: "SemiPrivacy"
+        sequence:
+          - action: input_select.set_options
+            target:
+              entity_id: !input curtain_state_helper
+            data:
+              options:
+                - "SemiPrivacy"
+          - action: scene.turn_on
+            target: !input scene_semi_privacy
