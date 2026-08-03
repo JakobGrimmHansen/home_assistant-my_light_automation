@@ -613,7 +613,7 @@ action:
       # MANUAL TRANSITIONS (3-STATE SEQUENTIAL CYCLE)
       #########################################################
 
-      # auto_on (Bright) -> manual_step2_descend
+      # auto_on (Bright) -> manual_off
       - conditions:
           - condition: trigger
             id: manual_toggle
@@ -624,9 +624,9 @@ action:
             target:
               entity_id: !input room_state
             data:
-              option: "manual_step2_descend"
+              option: "manual_off"
 
-      # auto_off (Off) -> manual_step2_climb
+      # auto_off (Off) -> manual_step3
       - conditions:
           - condition: trigger
             id: manual_toggle
@@ -637,9 +637,9 @@ action:
             target:
               entity_id: !input room_state
             data:
-              option: "manual_step2_climb"
+              option: "manual_step3"
 
-      # auto_dimmed (Dim) -> manual_step2_climb (prepared to step up)
+      # auto_dimmed (Dim) -> manual_off
       - conditions:
           - condition: trigger
             id: manual_toggle
@@ -650,7 +650,7 @@ action:
             target:
               entity_id: !input room_state
             data:
-              option: "manual_step2_climb"
+              option: "manual_off"
 
       # manual_off (State 1) -> manual_step2_climb (State 2 Ascending)
       - conditions:
