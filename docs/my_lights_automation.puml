@@ -1,0 +1,55 @@
+@startuml Room_Light_State_Machine
+
+' Orthogonal right-angle lines and wide grid spacing
+skinparam linetype ortho
+skinparam shadowing false
+skinparam nodesep 150
+skinparam ranksep 80
+
+hide empty description
+
+[*] --> AutomaticMode
+
+state "Automatic Mode" as AutomaticMode {
+    state auto_off
+    state auto_on
+    state auto_dimmed
+
+    [*] --> auto_off
+    
+    auto_off -down-> auto_on : motion_on\n[Lux < Limit]
+    auto_on -right--> auto_dimmed : motion_off\n[for: no_motion_wait]
+    auto_dimmed -left--> auto_on : motion_on
+    auto_dimmed -up-> auto_off : timeout\n[for: auto_off_wait]
+
+    ' High Lux Cutoffs
+    auto_on -up--> auto_off : high_lux_cutoff
+    auto_dimmed -up--> auto_off : high_lux_cutoff
+}
+
+state "Manual Override Mode" as ManualMode {
+    state manual_off
+    state manual_step2_climb
+    state manual_step3
+    state manual_step2_descend
+
+    [*] --> manual_off
+
+    ' Manual cycling sequence
+    manual_off -right--> manual_step2_climb : room_manual_toggle
+    manual_step2_climb -down-> manual_step3 : room_manual_toggle
+    manual_step3 -left--> manual_step2_descend : room_manual_toggle
+    manual_step2_descend -up-> manual_off : room_manual_toggle
+}
+
+' External Mode Transitions
+auto_on -right---> manual_off : room_manual_toggle
+auto_dimmed -right---> manual_off : room_manual_toggle
+auto_off -right---> manual_step3 : room_manual_toggle
+
+' System Overrides
+AutomaticMode -right---> manual_off : room_manual_off_force
+ManualMode -left---> auto_on : room_auto_mode_enable\n[motion == 'on']
+ManualMode -left---> auto_off : room_auto_mode_enable / timeout\n[motion == 'off']
+
+@enduml

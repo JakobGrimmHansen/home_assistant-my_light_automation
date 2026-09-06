@@ -1,11 +1,13 @@
 blueprint:
-  name: Room Light State Machine v15
+  name: Room Light State Machine v17
   description: >-
     Advanced room lighting state machine with:
       - Automatic motion lighting
       - Manual override states
+      - High lux auto-off transition from auto_on and auto_dimmed
+      - Forced manual_off event trigger (room_manual_off_force)
       - Automatic dimming or Scene activation
-      - Lux-aware activation
+      - Lux-aware activation & deactivation
       - Smooth light transitions
       - Event-driven architecture
       - Hardware-independent button handling
@@ -28,7 +30,7 @@ blueprint:
         Logical room identifier used for custom events.
         
         Must match the room value emitted by your
-        button automations.
+        button automations or external triggers.
       selector:
         text:
 
@@ -175,11 +177,11 @@ blueprint:
           mode: box
 
     #########################################################
-    # LUX
+    # LUX & HIGH LUX CUT-OFF
     #########################################################
 
     lux_sensor:
-      name: Lux Sensor
+      name: Activation Lux Sensor
       description: >-
         Optional brightness sensor used to prevent lights from
         automatically turning on when the room is already bright.
@@ -191,7 +193,7 @@ blueprint:
           domain: sensor
 
     lux_limit:
-      name: Lux Limit
+      name: Activation Lux Limit
       description: >-
         Maximum lux value allowed for automatic activation.
       default: 0
@@ -199,6 +201,38 @@ blueprint:
         number:
           min: 0
           max: 10000
+
+    high_lux_sensor:
+      name: High Lux Cut-Off Sensor
+      description: >-
+        Lux sensor used to turn lights OFF if ambient light becomes bright enough while in auto_on or auto_dimmed state.
+        Leave empty to disable high lux auto-off.
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+
+    high_lux_limit:
+      name: High Lux Limit (Off Cut-off)
+      description: >-
+        If lux goes above this limit for the delay duration, lights will transition to auto_off.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 10000
+
+    high_lux_wait:
+      name: High Lux Delay (Seconds)
+      description: >-
+        Time lux must continuously stay above the high lux threshold before triggering auto_off.
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: seconds
+          mode: box
 
     #########################################################
     # BRIGHTNESS SETTINGS (Used if Control Type is Brightness)
@@ -404,6 +438,9 @@ variables:
   lux_sensor_entity: !input lux_sensor
   lux_limit_value: !input lux_limit
 
+  high_lux_sensor_entity: !input high_lux_sensor
+  high_lux_limit_value: !input high_lux_limit
+
   control_type_value: !input control_type
 
   timed_brightness_enabled_value: !input timed_brightness_enabled
@@ -493,6 +530,17 @@ trigger:
     id: motion_off
 
   #########################################################
+  # HIGH LUX CUT-OFF TRIGGER
+  #########################################################
+
+  - platform: numeric_state
+    entity_id: !input high_lux_sensor
+    above: !input high_lux_limit
+    for:
+      seconds: !input high_lux_wait
+    id: high_lux_cutoff
+
+  #########################################################
   # AUTO DIMMED TIMEOUT
   #########################################################
 
@@ -522,14 +570,24 @@ trigger:
     id: manual_toggle
 
   #########################################################
-  # AUTO MODE EVENT
+  # FORCE MANUAL OFF EVENT
   #########################################################
 
   - platform: event
-    event_type: room_auto_mode
+    event_type: room_manual_off_force
     event_data:
       room: !input room_name
-    id: auto_mode
+    id: manual_off_force
+
+  #########################################################
+  # AUTO MODE ENABLE EVENT
+  #########################################################
+
+  - platform: event
+    event_type: room_auto_mode_enable
+    event_data:
+      room: !input room_name
+    id: auto_mode_enable
 
   #########################################################
   # MANUAL OVERRIDE INACTIVITY TIMEOUTS
@@ -561,12 +619,46 @@ action:
   - choose:
 
       #########################################################
+      # HIGH LUX CUT-OFF
+      #########################################################
+
+      - conditions:
+          - condition: trigger
+            id: high_lux_cutoff
+          - condition: template
+            value_template: "{{ high_lux_limit_value | int(0) > 0 }}"
+          - condition: template
+            value_template: "{{ high_lux_sensor_entity not in ['', 'none', none] }}"
+          - condition: template
+            value_template: "{{ states(room_state_entity) in ['auto_on', 'auto_dimmed'] }}"
+        sequence:
+          - action: input_select.select_option
+            target:
+              entity_id: !input room_state
+            data:
+              option: "auto_off"
+
+      #########################################################
+      # FORCE MANUAL OFF TRIGGER
+      #########################################################
+
+      - conditions:
+          - condition: trigger
+            id: manual_off_force
+        sequence:
+          - action: input_select.select_option
+            target:
+              entity_id: !input room_state
+            data:
+              option: "manual_off"
+
+      #########################################################
       # RETURN TO AUTO MODE
       #########################################################
 
       - conditions:
           - condition: trigger
-            id: auto_mode
+            id: auto_mode_enable
         sequence:
           - choose:
               # Occupied -> auto_on
