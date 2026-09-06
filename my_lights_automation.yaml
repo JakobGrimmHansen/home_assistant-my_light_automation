@@ -1,5 +1,5 @@
 blueprint:
-  name: Room Light State Machine v17
+  name: Room Light State Machine v17.2
   description: >-
     Advanced room lighting state machine with:
       - Automatic motion lighting
@@ -187,7 +187,7 @@ blueprint:
         automatically turning on when the room is already bright.
 
         Leave empty to disable lux-based activation logic.
-      default: ""
+      default: []
       selector:
         entity:
           domain: sensor
@@ -207,7 +207,7 @@ blueprint:
       description: >-
         Lux sensor used to turn lights OFF if ambient light becomes bright enough while in auto_on or auto_dimmed state.
         Leave empty to disable high lux auto-off.
-      default: ""
+      default: []
       selector:
         entity:
           domain: sensor
@@ -285,7 +285,7 @@ blueprint:
     daylight_bright_scene:
       name: Daylight Bright Scene
       description: Scene activated for normal daytime occupancy when the daylight schedule is ON.
-      default: ""
+      default: []
       selector:
         entity:
           domain: scene
@@ -293,7 +293,7 @@ blueprint:
     daylight_dim_scene:
       name: Daylight Dim Scene
       description: Scene activated during daytime pre-off warning period when the daylight schedule is ON.
-      default: ""
+      default: []
       selector:
         entity:
           domain: scene
@@ -301,7 +301,7 @@ blueprint:
     nightlight_bright_scene:
       name: Nightlight Bright Scene
       description: Scene activated for night-time occupancy when the daylight schedule is OFF.
-      default: ""
+      default: []
       selector:
         entity:
           domain: scene
@@ -309,7 +309,7 @@ blueprint:
     nightlight_dim_scene:
       name: Nightlight Dim Scene
       description: Scene activated during night-time pre-off warning period when the daylight schedule is OFF.
-      default: ""
+      default: []
       selector:
         entity:
           domain: scene
@@ -317,7 +317,7 @@ blueprint:
     off_scene:
       name: Off Scene (Optional)
       description: Common scene activated to turn everything off. Leave blank to use standard light turn off.
-      default: ""
+      default: []
       selector:
         entity:
           domain: scene
@@ -349,7 +349,7 @@ blueprint:
     manual_scene_stage_2:
       name: Manual Stage 2 Scene
       description: Scene activated for manual_step2_climb and manual_step2_descend states when Control Type is Scene.
-      default: ""
+      default: []
       selector:
         entity:
           domain: scene
@@ -357,7 +357,7 @@ blueprint:
     manual_scene_stage_3:
       name: Manual Stage 3 Scene
       description: Scene activated for manual_step3 state when Control Type is Scene.
-      default: ""
+      default: []
       selector:
         entity:
           domain: scene
@@ -376,7 +376,7 @@ blueprint:
     profile_schedule:
       name: Daylight Schedule
       description: Select the Schedule Helper entity that defines when it is Daytime (Schedule ON = Daylight, Schedule OFF = Nightlight).
-      default: ""
+      default: []
       selector:
         entity:
           domain: schedule
@@ -473,7 +473,7 @@ variables:
   #########################################################
 
   is_daylight: >
-    {% if not timed_brightness_enabled_value or schedule_entity in ['', 'none', none] %}
+    {% if not timed_brightness_enabled_value or schedule_entity in ['', 'none', none, []] %}
       true
     {% else %}
       {{ states(schedule_entity) == 'on' }}
@@ -628,7 +628,7 @@ action:
           - condition: template
             value_template: "{{ high_lux_limit_value | int(0) > 0 }}"
           - condition: template
-            value_template: "{{ high_lux_sensor_entity not in ['', 'none', none] }}"
+            value_template: "{{ high_lux_sensor_entity not in ['', 'none', none, []] }}"
           - condition: template
             value_template: "{{ states(room_state_entity) in ['auto_on', 'auto_dimmed'] }}"
         sequence:
@@ -810,7 +810,7 @@ action:
             value_template: >
               {{
                 lux_limit_value | int(0) == 0
-                or lux_sensor_entity in ['', 'none', none]
+                or lux_sensor_entity in ['', 'none', none, []]
                 or states(lux_sensor_entity) | float(0) < lux_limit_value | float(0)
               }}
         sequence:
@@ -871,7 +871,7 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ control_type_value == 'scene' and off_scene_value != '' }}"
+                    value_template: "{{ control_type_value == 'scene' and off_scene_value not in ['', 'none', none, []] }}"
                 sequence:
                   - action: scene.turn_on
                     target:
@@ -894,7 +894,7 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ control_type_value == 'scene' and off_scene_value != '' }}"
+                    value_template: "{{ control_type_value == 'scene' and off_scene_value not in ['', 'none', none, []] }}"
                 sequence:
                   - action: scene.turn_on
                     target:
@@ -917,7 +917,7 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ control_type_value == 'scene' and effective_bright_scene != '' }}"
+                    value_template: "{{ control_type_value == 'scene' and effective_bright_scene not in ['', 'none', none, []] }}"
                 sequence:
                   - action: scene.turn_on
                     target:
@@ -941,7 +941,7 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ control_type_value == 'scene' and manual_sc_3 != '' }}"
+                    value_template: "{{ control_type_value == 'scene' and manual_sc_3 not in ['', 'none', none, []] }}"
                 sequence:
                   - action: scene.turn_on
                     target:
@@ -965,7 +965,7 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ control_type_value == 'scene' and effective_dim_scene != '' }}"
+                    value_template: "{{ control_type_value == 'scene' and effective_dim_scene not in ['', 'none', none, []] }}"
                 sequence:
                   - action: scene.turn_on
                     target:
@@ -989,7 +989,7 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ control_type_value == 'scene' and manual_sc_2 != '' }}"
+                    value_template: "{{ control_type_value == 'scene' and manual_sc_2 not in ['', 'none', none, []] }}"
                 sequence:
                   - action: scene.turn_on
                     target:
