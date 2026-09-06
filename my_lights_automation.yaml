@@ -1,10 +1,10 @@
 blueprint:
-  name: Room Light State Machine v17.2
+  name: Room Light State Machine v17.3
   description: >-
     Advanced room lighting state machine with:
       - Automatic motion lighting
       - Manual override states
-      - High lux auto-off transition from auto_on and auto_dimmed
+      - High lux auto-off transition from auto_on and auto_dimmed using the main lux sensor
       - Forced manual_off event trigger (room_manual_off_force)
       - Automatic dimming or Scene activation
       - Lux-aware activation & deactivation
@@ -181,12 +181,11 @@ blueprint:
     #########################################################
 
     lux_sensor:
-      name: Activation Lux Sensor
+      name: Room Lux Sensor
       description: >-
-        Optional brightness sensor used to prevent lights from
-        automatically turning on when the room is already bright.
+        Brightness sensor used both for activation checks and high-lux auto-off logic.
 
-        Leave empty to disable lux-based activation logic.
+        Leave empty to disable lux-based features entirely.
       default: []
       selector:
         entity:
@@ -195,27 +194,17 @@ blueprint:
     lux_limit:
       name: Activation Lux Limit
       description: >-
-        Maximum lux value allowed for automatic activation.
+        Maximum lux value allowed for automatic activation when motion is detected.
       default: 0
       selector:
         number:
           min: 0
           max: 10000
 
-    high_lux_sensor:
-      name: High Lux Cut-Off Sensor
-      description: >-
-        Lux sensor used to turn lights OFF if ambient light becomes bright enough while in auto_on or auto_dimmed state.
-        Leave empty to disable high lux auto-off.
-      default: []
-      selector:
-        entity:
-          domain: sensor
-
     high_lux_limit:
       name: High Lux Limit (Off Cut-off)
       description: >-
-        If lux goes above this limit for the delay duration, lights will transition to auto_off.
+        If lux from the Room Lux Sensor goes above this limit for the delay duration while lights are on, lights will transition to auto_off.
       default: 0
       selector:
         number:
@@ -438,7 +427,6 @@ variables:
   lux_sensor_entity: !input lux_sensor
   lux_limit_value: !input lux_limit
 
-  high_lux_sensor_entity: !input high_lux_sensor
   high_lux_limit_value: !input high_lux_limit
 
   control_type_value: !input control_type
@@ -534,7 +522,7 @@ trigger:
   #########################################################
 
   - platform: numeric_state
-    entity_id: !input high_lux_sensor
+    entity_id: !input lux_sensor
     above: !input high_lux_limit
     for:
       seconds: !input high_lux_wait
@@ -628,7 +616,7 @@ action:
           - condition: template
             value_template: "{{ high_lux_limit_value | int(0) > 0 }}"
           - condition: template
-            value_template: "{{ high_lux_sensor_entity not in ['', 'none', none, []] }}"
+            value_template: "{{ lux_sensor_entity not in ['', 'none', none, []] }}"
           - condition: template
             value_template: "{{ states(room_state_entity) in ['auto_on', 'auto_dimmed'] }}"
         sequence:
